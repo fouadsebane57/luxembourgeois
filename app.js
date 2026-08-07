@@ -3,8 +3,12 @@
    Les données sont dans cours.js. Ce fichier contient la logique.
    ===================================================================== */
 
+const APP_VERSION = "2.0.0";
+const BUILD = "2026-08-07.1";
 const ITEMS = [];
 COURS.forEach((l, li) => l.i.forEach((it, ii) => ITEMS.push({ ...it, cle: li + "-" + ii, lecon: li })));
+const $ = id => document.getElementById(id);
+const echapper = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 /* ---------- contexte technique ---------- */
 const dansCadre = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
@@ -22,24 +26,49 @@ const Store = {
     try { localStorage.setItem(k, v); return true; } catch (e) { return false; }
   }
 };
-let prog = {}, valides = {}, jr = { seances: 0, minutes: 0, dernier: null, serie: 0, hist: {} };
-let reg = { cor: true, echo: true, comp: true, truc: true, vit: 0.5, int: 1.0, tps: 5000, vDe: "", vFr: "" };
+let prog = {}, valides = {}, favoris = {}, jr = { seances: 0, minutes: 0, dernier: null, dernierKey: null, serie: 0, hist: {} };
+let reg = { cor: false, echo: true, comp: true, truc: true, vit: 0.5, int: 1.0, tps: 5000, vDe: "", vFr: "", obj: 20 };
 const JOUR = 86400000, INTERVALLES = [0, 1, 2, 4, 8, 16, 32];
 const auj = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+const jourCle = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const minutesAuj = () => Number((jr.hist && (jr.hist[auj()] ?? jr.hist[String(auj())])) || 0);
+let filtreLex = "tous";
+let derniereDiag = "";
+let erreurs = [];
+function logErreur(type, err) {
+  const msg = `${new Date().toISOString()} · ${type} · ${err && (err.stack || err.message) ? (err.stack || err.message) : String(err)}`;
+  erreurs.push(msg); erreurs = erreurs.slice(-20);
+  try { localStorage.setItem("lux:errors", JSON.stringify(erreurs)); } catch (_) {}
+}
+window.addEventListener("error", e => logErreur("JS", e.error || e.message));
+window.addEventListener("unhandledrejection", e => logErreur("Promise", e.reason));
 
 async function charger() {
-  const a = await Store.get("lux:prog"); if (a) { try { prog = JSON.parse(a); } catch (e) {} }
-  const v = await Store.get("lux:valides"); if (v) { try { valides = JSON.parse(v); } catch (e) {} }
-  const b = await Store.get("lux:journal"); if (b) { try { jr = Object.assign(jr, JSON.parse(b)); } catch (e) {} }
-  const c = await Store.get("lux:reglages"); if (c) { try { reg = Object.assign(reg, JSON.parse(c)); } catch (e) {} }
+  const a = await Store.get("lux:prog"); if (a) { try { prog = JSON.parse(a); } catch (e) { logErreur("chargement progression", e); } }
+  const v = await Store.get("lux:valides"); if (v) { try { valides = JSON.parse(v); } catch (e) { logErreur("chargement leçons", e); } }
+  const b = await Store.get("lux:journal"); if (b) { try { jr = Object.assign(jr, JSON.parse(b)); } catch (e) { logErreur("chargement journal", e); } }
+  const c = await Store.get("lux:reglages"); if (c) { try { reg = Object.assign(reg, JSON.parse(c)); } catch (e) { logErreur("chargement réglages", e); } }
+  const f = await Store.get("lux:favoris"); if (f) { try { favoris = JSON.parse(f); } catch (e) { logErreur("chargement favoris", e); } }
+  try { erreurs = JSON.parse(localStorage.getItem("lux:errors") || "[]").slice(-20); } catch (_) { erreurs = []; }
   if (!jr.hist) jr.hist = {};
-  majReglages(); alerteContexte(); peindre();
+  if (!Number.isFinite(Number(reg.obj))) reg.obj = 20;
+  const migrationV2 = await Store.get("lux:v2migrated");
+  if (!migrationV2) {
+    reg.cor = false;
+    await Store.set("lux:reglages", JSON.stringify(reg));
+    await Store.set("lux:v2migrated", "1");
+  }
+  majReglages(); alerteContexte(); majConnexion(); majInstallation(); peindre();
 }
 async function sauver() {
-  await Store.set("lux:prog", JSON.stringify(prog));
-  await Store.set("lux:valides", JSON.stringify(valides));
-  await Store.set("lux:journal", JSON.stringify(jr));
-  await Store.set("lux:reglages", JSON.stringify(reg));
+  const ok = await Promise.all([
+    Store.set("lux:prog", JSON.stringify(prog)),
+    Store.set("lux:valides", JSON.stringify(valides)),
+    Store.set("lux:journal", JSON.stringify(jr)),
+    Store.set("lux:reglages", JSON.stringify(reg)),
+    Store.set("lux:favoris", JSON.stringify(favoris))
+  ]);
+  if (ok.some(x => !x)) afficherToast("La progression n'a pas pu être enregistrée sur cet appareil.");
 }
 const niv = c => (prog[c] && prog[c].n) || 0;
 const due = c => (prog[c] && prog[c].due) || 0;
@@ -73,9 +102,13 @@ function peindre() {
   document.getElementById("barH").style.width = Math.min(100, h) + "%";
   document.getElementById("lblH").textContent = h.toFixed(1) + " h sur 100";
   document.getElementById("resH").textContent = h < 0.1
-    ? "Tu n'as pas encore commencé. Deux heures par jour, cinquante jours."
-    : "Il te reste " + (100 - h).toFixed(1) + " heures, soit environ " + Math.ceil(Math.max(0, 100 - h) / 2) + " jours de trajet.";
+    ? "Tu n'as pas encore commencé. Commence court, puis augmente progressivement."
+    : "Il te reste " + Math.max(0, 100 - h).toFixed(1) + " heures sur le parcours indicatif de 100 heures.";
   document.getElementById("cpt").innerHTML = jr.seances ? (h.toFixed(1) + " h<br>" + (jr.serie || 0) + " jours de suite") : "";
+  const ma = minutesAuj(), objectif = Math.max(5, Number(reg.obj) || 20), pct = Math.min(100, Math.round(ma / objectif * 100));
+  if ($("objTxt")) $("objTxt").textContent = `${Math.round(ma)} min sur ${objectif} min`;
+  if ($("objVal")) $("objVal").textContent = pct + "%";
+  if ($("objBar")) $("objBar").style.width = pct + "%";
   document.getElementById("sv1").textContent = nbValides() + " / " + COURS.length;
   document.getElementById("sv2").textContent = solides() + " / " + ITEMS.length;
   document.getElementById("sv3").textContent = h.toFixed(1) + " h sur 100";
@@ -129,9 +162,10 @@ function racine(lb) { return lb.replace(/^(ech|du|hie|hien|si|mir|dir|Dir|d'|de 
 function fiche(it) {
   const n = niv(it.cle);
   const st = n >= 4 ? '<div class="fst ok">Solide</div>' : (n > 0 ? '<div class="fst">En cours</div>' : '<div class="fst">Pas encore vu</div>');
-  return `<div class="f"><div class="fb"><div class="flb">${it.lb}</div><div class="fph">${it.ph}</div>
-   <div class="ffr">${it.fr}</div>${it.tr ? `<div class="ftr">Astuce : ${it.tr}</div>` : ""}${st}</div>
-   <div style="display:flex;gap:5px"><button class="mn" data-d="${encodeURIComponent(it.lb)}">Écouter</button>
+  const fav = !!favoris[it.cle];
+  return `<div class="f"><div class="fb"><div class="flb">${echapper(it.lb)}</div><div class="fph">${echapper(it.ph)}</div>
+   <div class="ffr">${echapper(it.fr)}</div>${it.tr ? `<div class="ftr">Astuce : ${echapper(it.tr)}</div>` : ""}${st}</div>
+   <div style="display:flex;gap:5px"><button class="fav ${fav ? "on" : ""}" data-fav="${it.cle}" aria-label="${fav ? "Retirer des favoris" : "Ajouter aux favoris"}" title="Favori">★</button><button class="mn" data-d="${encodeURIComponent(it.lb)}">Écouter</button>
    <a class="mn" href="https://lod.lu/search?q=${encodeURIComponent(racine(it.lb))}" target="_blank" rel="noopener">lod.lu</a></div></div>`;
 }
 function ouvrir(li) {
@@ -145,9 +179,15 @@ function ouvrir(li) {
   window.scrollTo(0, 0);
 }
 function peindreLex(f = "") {
-  const q = (f || "").trim().toLowerCase();
-  const l = ITEMS.filter(i => !q || i.lb.toLowerCase().includes(q) || i.fr.toLowerCase().includes(q));
+  const q = normaliserRecherche(f || "");
+  let l = ITEMS.filter(i => !q || normaliserRecherche(i.lb).includes(q) || normaliserRecherche(i.fr).includes(q));
+  if (filtreLex === "revoir") l = l.filter(i => niv(i.cle) > 0 && due(i.cle) <= auj());
+  if (filtreLex === "solides") l = l.filter(i => niv(i.cle) >= 4);
+  if (filtreLex === "favoris") l = l.filter(i => favoris[i.cle]);
   document.getElementById("lexique").innerHTML = l.map(fiche).join("") || `<div class="p">Aucun résultat.</div>`;
+}
+function normaliserRecherche(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 
 /* ---------- voix ---------- */
@@ -155,29 +195,45 @@ let VOIX = [], vDe = null, vFr = null;
 function chargerVoix() {
   if (!("speechSynthesis" in window)) return;
   VOIX = speechSynthesis.getVoices() || []; if (!VOIX.length) return;
-  const de = VOIX.filter(v => /^de/i.test(v.lang)), fr = VOIX.filter(v => /^fr/i.test(v.lang));
+  const lb = VOIX.filter(v => /^lb/i.test(v.lang));
+  const de = VOIX.filter(v => /^de/i.test(v.lang));
+  const lux = [...lb, ...de.filter(v => !lb.some(x => x.name === v.name))];
+  const fr = VOIX.filter(v => /^fr/i.test(v.lang));
   const sd = document.getElementById("selDe"), sf = document.getElementById("selFr");
-  sd.innerHTML = de.length ? de.map(v => `<option value="${v.name}">${v.name}</option>`).join("") : `<option value="">Aucune voix allemande installée</option>`;
-  sf.innerHTML = fr.length ? fr.map(v => `<option value="${v.name}">${v.name}</option>`).join("") : `<option value="">Aucune voix française installée</option>`;
-  if (reg.vDe && de.some(v => v.name === reg.vDe)) sd.value = reg.vDe; else if (de.length) reg.vDe = sd.value = de[0].name;
+  sd.innerHTML = lux.length ? lux.map(v => `<option value="${echapper(v.name)}">${/^lb/i.test(v.lang) ? "Lëtzebuergesch · " : "Allemand · "}${echapper(v.name)}</option>`).join("") : `<option value="">Aucune voix compatible installée</option>`;
+  sf.innerHTML = fr.length ? fr.map(v => `<option value="${echapper(v.name)}">${echapper(v.name)}</option>`).join("") : `<option value="">Aucune voix française installée</option>`;
+  if (reg.vDe && lux.some(v => v.name === reg.vDe)) sd.value = reg.vDe; else if (lux.length) reg.vDe = sd.value = lux[0].name;
   if (reg.vFr && fr.some(v => v.name === reg.vFr)) sf.value = reg.vFr; else if (fr.length) reg.vFr = sf.value = fr[0].name;
-  vDe = VOIX.find(v => v.name === reg.vDe) || de[0] || null;
+  vDe = VOIX.find(v => v.name === reg.vDe) || lux[0] || null;
   vFr = VOIX.find(v => v.name === reg.vFr) || fr[0] || null;
 }
 if ("speechSynthesis" in window) { chargerVoix(); speechSynthesis.onvoiceschanged = chargerVoix; }
 const pourDe = t => t.replace(/ë/g, "ä").replace(/Ë/g, "Ä").replace(/é/g, "e").replace(/É/g, "E").replace(/à/g, "a");
 function dire(t, lg, mult, pitchMult) {
   return new Promise(r => {
-    if (!("speechSynthesis" in window)) { setTimeout(r, 1000); return; }
+    if (!("speechSynthesis" in window)) { setTimeout(r, 500); return; }
     try {
-      const u = new SpeechSynthesisUtterance(lg === "de" ? pourDe(t) : t);
-      if (lg === "de") { u.lang = "de-DE"; if (vDe) u.voice = vDe; u.rate = reg.vit * (mult || 1); }
-      else { u.lang = "fr-FR"; if (vFr) u.voice = vFr; u.rate = Math.min(1.15, reg.vit + 0.4) * (mult || 1); }
+      const vraieLb = lg === "de" && vDe && /^lb/i.test(vDe.lang || "");
+      const texte = lg === "de" && !vraieLb ? pourDe(t) : t;
+      const u = new SpeechSynthesisUtterance(texte);
+      if (lg === "de") {
+        u.lang = vraieLb ? (vDe.lang || "lb-LU") : "de-DE";
+        if (vDe) u.voice = vDe;
+        u.rate = Math.max(.25, reg.vit * (mult || 1));
+      } else {
+        u.lang = "fr-FR"; if (vFr) u.voice = vFr;
+        u.rate = Math.min(1.15, reg.vit + 0.4) * (mult || 1);
+      }
       u.pitch = Math.max(0.1, Math.min(2, reg.int * (pitchMult || 1)));
-      let f = false; const fin = () => { if (!f) { f = true; r(); } };
-      u.onend = fin; u.onerror = fin; setTimeout(fin, Math.max(3000, t.length * 230));
+      let fini = false, timer = null;
+      const fin = () => { if (!fini) { fini = true; if (timer) clearTimeout(timer); r(); } };
+      u.onend = fin;
+      u.onerror = e => { logErreur("synthèse vocale", e.error || "erreur"); fin(); };
+      try { speechSynthesis.resume(); } catch (_) {}
       speechSynthesis.speak(u);
-    } catch (e) { setTimeout(r, 1000); }
+      const vitesse = Math.max(.3, u.rate || .7);
+      timer = setTimeout(fin, Math.max(3500, texte.length * 180 / vitesse));
+    } catch (e) { logErreur("dire", e); setTimeout(r, 300); }
   });
 }
 
@@ -197,6 +253,11 @@ async function ouvrirMicro() {
     return false;
   }
 }
+function fermerMicro() {
+  if (!micStream) return;
+  try { micStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+  micStream = null;
+}
 function enregistrer(ms) {
   return new Promise(r => {
     if (!micStream || typeof MediaRecorder === "undefined") { setTimeout(() => r(null), ms); return; }
@@ -212,23 +273,27 @@ function jouerBlob(b) {
   return new Promise(r => {
     if (!b) { r(); return; }
     try {
-      const u = URL.createObjectURL(b), a = new Audio(u);
-      a.onended = () => { URL.revokeObjectURL(u); r(); };
-      a.onerror = () => { URL.revokeObjectURL(u); r(); };
-      a.play().catch(() => r()); setTimeout(r, 9000);
-    } catch (e) { r(); }
+      const u = URL.createObjectURL(b), a = new Audio(u); let fini = false;
+      const fin = () => { if (fini) return; fini = true; try { URL.revokeObjectURL(u); } catch (_) {} r(); };
+      a.onended = fin; a.onerror = fin;
+      a.play().catch(e => { logErreur("lecture écho", e); fin(); });
+      setTimeout(fin, 9000);
+    } catch (e) { logErreur("jouerBlob", e); r(); }
   });
 }
+let recoDerniereErreur = "";
 function ecouter(ms, langue) {
   return new Promise(r => {
     if (!RECO) { r(null); return; }
-    let rec; try { rec = new RECO(); } catch (e) { r(null); return; }
-    rec.lang = langue || "de-DE"; rec.interimResults = false; rec.maxAlternatives = 3;
+    let rec; try { rec = new RECO(); } catch (e) { logErreur("reconnaissance init", e); r(null); return; }
+    rec.lang = langue || (vDe && /^lb/i.test(vDe.lang || "") ? "lb-LU" : "de-DE");
+    rec.interimResults = false; rec.maxAlternatives = 3; recoDerniereErreur = "";
     let fini = false, res = null;
-    const stop = () => { if (fini) return; fini = true; try { rec.stop(); } catch (e) {} r(res); };
-    rec.onresult = e => { try { res = e.results[0][0].transcript; } catch (x) {} stop(); };
-    rec.onerror = () => stop(); rec.onend = () => stop();
-    try { rec.start(); } catch (e) { r(null); return; }
+    const stop = () => { if (fini) return; fini = true; try { rec.stop(); } catch (_) {} r(res); };
+    rec.onresult = e => { try { res = e.results[0][0].transcript; } catch (x) { logErreur("reconnaissance résultat", x); } stop(); };
+    rec.onerror = e => { recoDerniereErreur = e.error || "erreur"; if (!/no-speech|aborted/.test(recoDerniereErreur)) logErreur("reconnaissance", recoDerniereErreur); stop(); };
+    rec.onend = () => stop();
+    try { rec.start(); } catch (e) { recoDerniereErreur = e.name || "start"; logErreur("reconnaissance démarrage", e); r(null); return; }
     setTimeout(stop, ms);
   });
 }
@@ -246,7 +311,7 @@ function distance(a, b) {
 
 /* ---------- moteur de séance ---------- */
 let plan = [], idx = 0, pause = false, actif = false, jt = 0, duree = 20, t0 = 0, verrou = null, derPause = 0;
-let scoreOk = 0, scoreTotal = 0;
+let scoreOk = 0, scoreTotal = 0, modeActif = "normal", solidesDebut = 0, dueDebut = 0;
 const melange = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const attente = it => Math.max(2500, reg.tps - (niv(it.cle) >= 3 ? 1200 : 0));
 
@@ -354,9 +419,11 @@ function maj() {
 async function tourDeParole(attendu, ms) {
   show("micro");
   let blob = null, dit = null;
-  if (reg.cor && RECO && micStream) dit = await ecouter(ms, "de-DE");
-  else if (reg.echo && micStream) blob = await enregistrer(ms);
-  else await dormir(ms);
+  if (reg.cor && RECO) dit = await ecouter(ms, vDe && /^lb/i.test(vDe.lang || "") ? "lb-LU" : "de-DE");
+  else if (reg.echo) {
+    if (!micStream) await ouvrirMicro();
+    if (micStream) blob = await enregistrer(ms); else await dormir(ms);
+  } else await dormir(ms);
   document.getElementById("micro").classList.remove("on");
   if (blob) { phase("Ta voix", "or"); await jouerBlob(blob); return null; }
   if (!dit) return null;
@@ -379,18 +446,22 @@ async function peutEtrePause() {
   await dormir(10000);
 }
 async function demarrer(mode) {
+  if (actif) return;
+  modeActif = mode;
   duree = (mode === "jeu") ? 5 : parseInt(document.querySelector('.d[aria-pressed="true"]').dataset.m, 10);
   plan = construire(duree, mode); idx = 0; actif = true; pause = false; t0 = Date.now(); derPause = Date.now(); jt++; scoreOk = 0; scoreTotal = 0;
+  solidesDebut = solides(); dueDebut = aRevoirAuj();
   document.getElementById("cd").classList.add("on");
   document.getElementById("bPau").textContent = "Pause";
   const noms = { jeu: "Jeu", revision: "Retour", nombres: "Chiffres", libre: "Écoute libre" };
   document.getElementById("etat").textContent = noms[mode] || ("Séance " + ((jr.seances || 0) + 1));
   if (!("speechSynthesis" in window)) bn("Voix indisponible sur ce navigateur.");
-  else if (!vDe) bn("Aucune voix allemande installée. Onglet Voix et micro.");
-  if ((reg.cor || reg.echo) && mode !== "libre") { const ok = await ouvrirMicro(); if (!ok) bn("Correction inactive : " + micErreur); }
-  try { if ("wakeLock" in navigator) verrou = await navigator.wakeLock.request("screen"); } catch (e) {}
+  else if (!vDe) bn("Aucune voix Lëtzebuergesch ou allemande trouvée. Onglet Voix et micro.");
+  if (reg.cor && !RECO && mode !== "libre") bn("Reconnaissance vocale non supportée. L'écho reste disponible.");
+  if (reg.echo && mode !== "libre") { const ok = await ouvrirMicro(); if (!ok) bn("Écho vocal inactif : " + micErreur); }
+  try { if ("wakeLock" in navigator) verrou = await navigator.wakeLock.request("screen"); } catch (e) { logErreur("wake lock", e); }
   await dire(mode === "libre" ? "Écoute libre. Rien à faire." : "On commence. Pose le téléphone. Réponds toujours à voix haute.", "fr");
-  boucle(jt);
+  boucle(jt).catch(e => { logErreur("boucle séance", e); bn("Une erreur a interrompu la séance."); terminer(); });
 }
 async function boucle(mj) {
   while (actif && mj === jt && idx < plan.length) {
@@ -423,7 +494,7 @@ async function boucle(mj) {
       const sim = await tourDeParole(it.lb, attente(it)); if (stop()) return;
       document.getElementById("an").classList.remove("on");
       phase("Le modèle"); await dire(it.lb, "de"); if (stop()) return;
-      noter(it.cle, sim === null ? null : (sim > 0.7 ? "ok" : sim < 0.4 ? "ko" : null)); await dormir(250);
+      noter(it.cle, sim === null ? null : (sim > 0.7 ? "ok" : null)); await dormir(250);
     }
     if (ex.type === "construction") {
       const it = ex.it;
@@ -469,7 +540,7 @@ async function boucle(mj) {
       phase("Réponse"); show("lb", it.lb); show("phx", it.ph);
       await dire(it.lb, "de"); if (stop()) return;
       if (!ex.rapide) { await dormir(800); await dire(it.lb, "de", 0.9); }
-      noter(it.cle, sim === null ? null : (sim > 0.7 ? "ok" : sim < 0.4 ? "ko" : null)); await dormir(200);
+      noter(it.cle, sim === null ? null : (sim > 0.7 ? "ok" : null)); await dormir(200);
     }
     if (ex.type === "chiffre") {
       const it = ex.it;
@@ -485,7 +556,7 @@ async function boucle(mj) {
         scoreTotal++;
         if (juste) { scoreOk++; phase("Exact", "on"); await dire("Exact.", "fr"); }
         else { phase("Non", "ko"); await dire("Non. C'était " + it.fr + ".", "fr"); }
-        noter(it.cle, juste ? "ok" : "ko");
+        noter(it.cle, juste ? "ok" : null);
       } else { phase("Réponse"); await dire("C'était " + it.fr + ".", "fr"); noter(it.cle, null); }
       if (stop()) return;
       show("fr", it.fr); await dire(it.lb, "de"); if (stop()) return; await dormir(200);
@@ -544,24 +615,44 @@ function noter(c, j) {
   prog[c] = p;
 }
 async function terminer() {
-  actif = false; try { speechSynthesis.cancel(); } catch (e) {}
-  try { if (verrou) { verrou.release(); verrou = null; } } catch (e) {}
+  if (!actif && !document.getElementById("cd").classList.contains("on")) return;
+  actif = false; jt++;
+  try { speechSynthesis.cancel(); } catch (_) {}
+  try { if (verrou) { await verrou.release(); verrou = null; } } catch (e) { logErreur("wake lock release", e); }
+  fermerMicro();
   COURS.forEach((l, li) => verifierValidation(li));
-  const mins = Math.min(duree, (Date.now() - t0) / 60000);
-  const d = new Date().toLocaleDateString("fr-FR");
-  if (jr.dernier !== d) {
-    const hier = new Date(auj() - JOUR).toLocaleDateString("fr-FR");
-    jr.serie = (jr.dernier === hier) ? (jr.serie || 0) + 1 : 1;
+  const mins = Math.max(0, Math.min(duree, (Date.now() - t0) / 60000));
+  const d = new Date().toLocaleDateString("fr-FR"), key = jourCle();
+  if (mins >= 0.5) {
+    if (jr.dernierKey !== key) {
+      const h = new Date(); h.setDate(h.getDate() - 1);
+      jr.serie = (jr.dernierKey === jourCle(h)) ? (jr.serie || 0) + 1 : 1;
+    }
+    if (!jr.hist) jr.hist = {};
+    jr.hist[auj()] = Number(jr.hist[auj()] || 0) + mins;
+    Object.keys(jr.hist).forEach(k => { if (/^\d+$/.test(k) && auj() - Number(k) > 90 * JOUR) delete jr.hist[k]; });
+    jr.seances = (jr.seances || 0) + 1;
+    jr.minutes = (jr.minutes || 0) + mins;
+    jr.dernier = d; jr.dernierKey = key;
+    await sauver();
   }
-  if (!jr.hist) jr.hist = {};
-  jr.hist[auj()] = (jr.hist[auj()] || 0) + mins;
-  Object.keys(jr.hist).forEach(k => { if (auj() - Number(k) > 60 * JOUR) delete jr.hist[k]; });
-  jr.seances = (jr.seances || 0) + 1;
-  jr.minutes = (jr.minutes || 0) + mins;
-  jr.dernier = d;
-  await sauver();
   document.getElementById("cd").classList.remove("on");
   peindre();
+  afficherBilan(mins);
+}
+function afficherBilan(mins) {
+  if (!$("sum")) return;
+  $("sumMin").textContent = mins < 1 ? "< 1 min" : `${Math.round(mins)} min`;
+  $("sumScore").textContent = scoreTotal ? `${scoreOk}/${scoreTotal}` : "—";
+  $("sumSolides").textContent = String(solides());
+  $("sumDue").textContent = String(aRevoirAuj());
+  const gain = solides() - solidesDebut;
+  const objectif = Math.max(5, Number(reg.obj) || 20);
+  const reste = Math.max(0, objectif - minutesAuj());
+  let msg = gain > 0 ? `${gain} expression${gain > 1 ? "s" : ""} consolidée${gain > 1 ? "s" : ""}. ` : "";
+  msg += reste > 0 ? `Il reste environ ${Math.ceil(reste)} min pour atteindre l'objectif du jour.` : "Objectif quotidien atteint.";
+  $("sumMsg").textContent = msg;
+  $("sum").classList.add("on");
 }
 
 /* ---------- test écrit ---------- */
@@ -607,147 +698,277 @@ async function jouerDialogue(k) {
 }
 
 /* ---------- diagnostic ---------- */
+async function etatPermissionMicro() {
+  if (!navigator.permissions || !navigator.permissions.query) return "inconnue";
+  try { const p = await navigator.permissions.query({ name: "microphone" }); return p.state || "inconnue"; }
+  catch (_) { return "inconnue"; }
+}
 async function diagnostic() {
-  const d = document.getElementById("diag"), l = [];
+  const d = $("diag"), l = [];
   d.innerHTML = "Test en cours…"; chargerVoix();
-  l.push("<b>Contexte</b> : " + (dansCadre ? "<span class='ko'>aperçu intégré, micro bloqué</span>" : "page autonome"));
-  l.push("<b>Adresse</b> : " + location.protocol + " · " + (secure ? "<span class='ok'>sécurisée</span>" : "<span class='ko'>non sécurisée, micro refusé</span>"));
-  l.push("<b>Mode installé</b> : " + (window.matchMedia("(display-mode: standalone)").matches ? "<span class='ok'>oui</span>" : "non, ouverte dans le navigateur"));
-  l.push("<b>Synthèse vocale</b> : " + (("speechSynthesis" in window) ? "<span class='ok'>disponible</span>" : "<span class='ko'>absente</span>"));
-  l.push("<b>Voix allemande</b> : " + (vDe ? "<span class='ok'>" + vDe.name + "</span>" : "<span class='ko'>aucune, installe-la dans les réglages du téléphone</span>"));
-  l.push("<b>Voix française</b> : " + (vFr ? "<span class='ok'>" + vFr.name + "</span>" : "<span class='ko'>aucune</span>"));
+  const ok = t => `<span class="ok">${echapper(t)}</span>`, ko = t => `<span class="ko">${echapper(t)}</span>`, or = t => `<span class="or">${echapper(t)}</span>`;
+  l.push(`<b>Application</b> : ${ok("V" + APP_VERSION + " · " + BUILD)}`);
+  l.push(`<b>Adresse</b> : ${echapper(location.protocol + "//" + location.host)} · ${secure ? ok("contexte sécurisé") : ko("contexte non sécurisé")}`);
+  l.push(`<b>Connexion</b> : ${navigator.onLine ? ok("en ligne") : or("hors ligne")}`);
+  l.push(`<b>Installation</b> : ${estInstallee() ? ok("application installée") : or("ouverte dans le navigateur")}`);
+  let stockage = false;
+  try { localStorage.setItem("lux:test", "1"); stockage = localStorage.getItem("lux:test") === "1"; localStorage.removeItem("lux:test"); } catch (_) {}
+  l.push(`<b>Stockage progression</b> : ${stockage ? ok("fonctionne") : ko("indisponible")}`);
+  l.push(`<b>Service worker</b> : ${("serviceWorker" in navigator) ? (navigator.serviceWorker.controller ? ok("actif") : or("supporté, pas encore contrôlé")) : ko("non supporté")}`);
+  l.push(`<b>Synthèse vocale</b> : ${("speechSynthesis" in window) ? ok("disponible") : ko("absente")}`);
+  l.push(`<b>Voix Lëtzebuergesch</b> : ${vDe ? ok((/^lb/i.test(vDe.lang || "") ? "native · " : "approximation allemande · ") + vDe.name) : ko("aucune voix compatible")}`);
+  l.push(`<b>Voix française</b> : ${vFr ? ok(vFr.name) : ko("aucune")}`);
+  const perm = await etatPermissionMicro();
+  l.push(`<b>Permission micro</b> : ${perm === "granted" ? ok("autorisée") : perm === "denied" ? ko("refusée") : or(perm)}`);
   d.innerHTML = l.join("<br>");
+
   const mic = await ouvrirMicro();
-  l.push("<b>Micro</b> : " + (mic ? "<span class='ok'>autorisé</span>" : "<span class='ko'>" + micErreur + "</span>"));
+  l.push(`<b>Micro</b> : ${mic ? ok("accessible") : ko(micErreur || "indisponible")}`);
+  l.push(`<b>Enregistrement local</b> : ${typeof MediaRecorder !== "undefined" ? ok("supporté") : ko("non supporté")}`);
+  l.push(`<b>Reconnaissance vocale</b> : ${RECO ? or("supportée, test à venir") : ko("non supportée par ce navigateur")}`);
   d.innerHTML = l.join("<br>");
+
   if (mic && typeof MediaRecorder !== "undefined") {
-    l.push("<b>Écho</b> : parle pendant trois secondes."); d.innerHTML = l.join("<br>");
-    await dire("Parle pendant trois secondes.", "fr");
-    const b = await enregistrer(3000); await jouerBlob(b);
-    l[l.length - 1] = "<b>Écho</b> : " + (b ? "<span class='ok'>ta voix a été rejouée</span>" : "<span class='ko'>échec</span>");
+    l.push(`<b>Test écho</b> : ${or("parle pendant 2 secondes")}`); d.innerHTML = l.join("<br>");
+    await dire("Parle pendant deux secondes.", "fr");
+    const b = await enregistrer(2000); await jouerBlob(b);
+    l[l.length - 1] = `<b>Test écho</b> : ${b ? ok("enregistrement et lecture terminés") : ko("échec de l'enregistrement")}`;
     d.innerHTML = l.join("<br>");
   }
-  if (RECO && mic) {
-    l.push("<b>Reconnaissance</b> : dis quelque chose maintenant."); d.innerHTML = l.join("<br>");
-    await dire("Dis quelque chose maintenant.", "fr");
-    const r = await ecouter(5000, "fr-FR"); recoOk = !!r;
-    l[l.length - 1] = "<b>Reconnaissance</b> : " + (r ? "<span class='ok'>fonctionne, entendu : " + r + "</span>" : "<span class='ko'>rien entendu, vérifie la connexion</span>");
-  } else l.push("<b>Reconnaissance</b> : " + (RECO ? "<span class='ko'>impossible sans micro</span>" : "<span class='ko'>non supportée, utilise Chrome</span>"));
-  l.push("");
-  l.push(mic ? (recoOk ? "Tout est prêt. Laisse la reconnaissance activée." : "Utilise l'écho de ta voix, il fonctionne sans connexion.") : "<b>Que faire</b> : publie la page en HTTPS, c'est la seule façon d'obtenir le micro.");
+  fermerMicro();
+
+  if (RECO && secure) {
+    l.push(`<b>Test reconnaissance</b> : ${or("dis bonjour maintenant")}`); d.innerHTML = l.join("<br>");
+    await dire("Dis bonjour maintenant.", "fr");
+    const r = await ecouter(4500, "fr-FR"); recoOk = !!r;
+    l[l.length - 1] = `<b>Test reconnaissance</b> : ${r ? ok("entendu : " + r) : ko("aucun résultat" + (recoDerniereErreur ? " · " + recoDerniereErreur : ""))}`;
+  }
+  if (erreurs.length) l.push(`<b>Dernière erreur enregistrée</b> : ${ko(erreurs[erreurs.length - 1].slice(0, 250))}`);
+  else l.push(`<b>Erreurs JavaScript</b> : ${ok("aucune enregistrée")}`);
+  l.push(`<br><b>Conseil</b> : ${!secure ? "ouvre l'application depuis ton adresse GitHub Pages en HTTPS." : !vDe ? "installe une voix allemande ou Lëtzebuergesch dans le téléphone." : !RECO ? "garde l'écho vocal activé, la reconnaissance n'est pas indispensable." : "la base technique est opérationnelle."}`);
   d.innerHTML = l.join("<br>");
+  derniereDiag = d.innerText;
 }
 
 /* ---------- sauvegarde ---------- */
 function exporter() {
-  const data = { v: 1, date: new Date().toISOString(), prog, valides, jr, reg };
-  const b = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+  const data = { v: 2, app: APP_VERSION, date: new Date().toISOString(), prog, valides, favoris, jr, reg };
+  const b = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(b);
-  a.download = "luxembourgeois-sauvegarde.json";
+  a.download = `luxembourgeois-sauvegarde-${jourCle()}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 }
+function objetSimple(v) { return v && typeof v === "object" && !Array.isArray(v); }
 function importer(f) {
   const r = new FileReader();
   r.onload = async () => {
     try {
       const d = JSON.parse(r.result);
-      if (d.prog) prog = d.prog;
-      if (d.valides) valides = d.valides;
-      if (d.jr) jr = Object.assign(jr, d.jr);
-      if (d.reg) reg = Object.assign(reg, d.reg);
+      if (!objetSimple(d) || !objetSimple(d.prog) || !objetSimple(d.valides) || !objetSimple(d.jr)) throw new Error("format de sauvegarde incomplet");
+      prog = d.prog; valides = d.valides;
+      favoris = objetSimple(d.favoris) ? d.favoris : favoris;
+      jr = Object.assign({ seances: 0, minutes: 0, dernier: null, dernierKey: null, serie: 0, hist: {} }, d.jr);
+      if (objetSimple(d.reg)) reg = Object.assign(reg, d.reg);
       await sauver(); majReglages(); peindre();
-      alert("Sauvegarde restaurée.");
-    } catch (e) { alert("Fichier illisible."); }
+      afficherToast("Sauvegarde restaurée avec succès.");
+    } catch (e) { logErreur("import", e); alert("Sauvegarde illisible ou incomplète."); }
+    finally { $("fileImport").value = ""; }
   };
   r.readAsText(f);
 }
 
 /* ---------- réglages et interactions ---------- */
 function majReglages() {
-  document.getElementById("swCor").setAttribute("aria-pressed", reg.cor ? "true" : "false");
-  document.getElementById("swEcho").setAttribute("aria-pressed", reg.echo ? "true" : "false");
-  document.getElementById("swComp").setAttribute("aria-pressed", reg.comp ? "true" : "false");
-  document.getElementById("swTruc").setAttribute("aria-pressed", reg.truc ? "true" : "false");
-  document.getElementById("rgVit").value = reg.vit;
-  document.getElementById("rgInt").value = reg.int;
-  document.getElementById("rgTps").value = reg.tps;
-  document.getElementById("vVit").textContent = reg.vit < 0.5 ? "très lente" : reg.vit < 0.7 ? "lente" : reg.vit < 0.95 ? "normale" : "rapide";
-  document.getElementById("vInt").textContent = reg.int < 0.85 ? "grave" : reg.int < 1.15 ? "moyenne" : "aiguë";
-  document.getElementById("vTps").textContent = (reg.tps / 1000).toFixed(1) + " secondes";
+  $("swCor").setAttribute("aria-pressed", reg.cor ? "true" : "false");
+  $("swEcho").setAttribute("aria-pressed", reg.echo ? "true" : "false");
+  $("swComp").setAttribute("aria-pressed", reg.comp ? "true" : "false");
+  $("swTruc").setAttribute("aria-pressed", reg.truc ? "true" : "false");
+  $("rgVit").value = reg.vit;
+  $("rgInt").value = reg.int;
+  $("rgTps").value = reg.tps;
+  $("rgObj").value = reg.obj || 20;
+  $("vVit").textContent = reg.vit < 0.5 ? "très lente" : reg.vit < 0.7 ? "lente" : reg.vit < 0.95 ? "normale" : "rapide";
+  $("vInt").textContent = reg.int < 0.85 ? "grave" : reg.int < 1.15 ? "moyenne" : "aiguë";
+  $("vTps").textContent = (reg.tps / 1000).toFixed(1) + " secondes";
+  $("vObj").textContent = (reg.obj || 20) + " min";
 }
+
 document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", "false"));
   b.setAttribute("aria-selected", "true");
   document.querySelectorAll(".vue").forEach(v => v.classList.remove("on"));
-  document.getElementById("v-" + b.dataset.v).classList.add("on");
+  $("v-" + b.dataset.v).classList.add("on");
   if (b.dataset.v === "voix") chargerVoix();
+  if (b.dataset.v === "install") majInstallation();
   window.scrollTo(0, 0);
 });
-document.getElementById("dur").onclick = e => {
+$("dur").onclick = e => {
   const b = e.target.closest(".d"); if (!b) return;
   document.querySelectorAll(".d").forEach(x => x.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true");
 };
-document.getElementById("go").onclick = () => demarrer("normal");
-document.getElementById("rev").onclick = () => demarrer("revision");
-document.getElementById("jeu").onclick = () => demarrer("jeu");
-document.getElementById("nbr").onclick = () => demarrer("nombres");
-document.getElementById("libre").onclick = () => demarrer("libre");
-document.getElementById("qt").onclick = terminer;
-document.getElementById("qzQuit").onclick = fermerTest;
-document.getElementById("bPau").onclick = () => {
-  pause = !pause; document.getElementById("bPau").textContent = pause ? "Reprendre" : "Pause";
-  try { pause ? speechSynthesis.pause() : speechSynthesis.resume(); } catch (e) {}
+$("go").onclick = () => demarrer("normal");
+$("rev").onclick = () => demarrer("revision");
+$("jeu").onclick = () => demarrer("jeu");
+$("nbr").onclick = () => demarrer("nombres");
+$("libre").onclick = () => demarrer("libre");
+$("qt").onclick = terminer;
+$("qzQuit").onclick = fermerTest;
+$("sumClose").onclick = () => $("sum").classList.remove("on");
+$("bPau").onclick = () => {
+  pause = !pause; $("bPau").textContent = pause ? "Reprendre" : "Pause";
+  try { pause ? speechSynthesis.pause() : speechSynthesis.resume(); } catch (_) {}
 };
-document.getElementById("bSui").onclick = () => { try { speechSynthesis.cancel(); } catch (e) {} idx++; jt++; if (actif) boucle(jt); };
-document.getElementById("bRef").onclick = () => { try { speechSynthesis.cancel(); } catch (e) {} jt++; if (actif) boucle(jt); };
-document.getElementById("swCor").onclick = async () => {
-  if (!RECO && !reg.cor) { alert("Reconnaissance vocale non supportée par ce navigateur. Utilise Chrome, ou active l'écho de ta voix."); return; }
+$("bSui").onclick = () => { try { speechSynthesis.cancel(); } catch (_) {} idx++; jt++; if (actif) boucle(jt).catch(e => logErreur("suivant", e)); };
+$("bRef").onclick = () => { try { speechSynthesis.cancel(); } catch (_) {} jt++; if (actif) boucle(jt).catch(e => logErreur("refaire", e)); };
+$("swCor").onclick = async () => {
+  if (!RECO && !reg.cor) { alert("La reconnaissance vocale n'est pas supportée par ce navigateur. L'écho de ta voix reste disponible."); return; }
   reg.cor = !reg.cor; majReglages(); await sauver();
 };
-document.getElementById("swEcho").onclick = async () => { reg.echo = !reg.echo; majReglages(); await sauver(); };
-document.getElementById("swComp").onclick = async () => { reg.comp = !reg.comp; majReglages(); await sauver(); };
-document.getElementById("swTruc").onclick = async () => { reg.truc = !reg.truc; majReglages(); await sauver(); };
-document.getElementById("rgVit").oninput = e => { reg.vit = parseFloat(e.target.value); majReglages(); };
-document.getElementById("rgInt").oninput = e => { reg.int = parseFloat(e.target.value); majReglages(); };
-document.getElementById("rgTps").oninput = e => { reg.tps = parseInt(e.target.value, 10); majReglages(); };
-["rgVit", "rgInt", "rgTps"].forEach(id => document.getElementById(id).onchange = sauver);
-document.getElementById("selDe").onchange = async e => { reg.vDe = e.target.value; vDe = VOIX.find(v => v.name === reg.vDe) || vDe; await sauver(); };
-document.getElementById("selFr").onchange = async e => { reg.vFr = e.target.value; vFr = VOIX.find(v => v.name === reg.vFr) || vFr; await sauver(); };
-document.getElementById("btnTestVoix").onclick = async () => { await dire("Voici la voix du professeur.", "fr"); await dire("Moien. Wéi geet et?", "de"); };
-document.getElementById("btnDiag").onclick = diagnostic;
-document.getElementById("btnExport").onclick = exporter;
-document.getElementById("btnImport").onclick = () => document.getElementById("fileImport").click();
-document.getElementById("fileImport").onchange = e => { if (e.target.files[0]) importer(e.target.files[0]); };
-document.getElementById("raz").onclick = async () => {
-  if (!confirm("Effacer toute la progression ?")) return;
-  prog = {}; valides = {}; jr = { seances: 0, minutes: 0, dernier: null, serie: 0, hist: {} };
-  await sauver(); peindre();
+$("swEcho").onclick = async () => { reg.echo = !reg.echo; majReglages(); await sauver(); };
+$("swComp").onclick = async () => { reg.comp = !reg.comp; majReglages(); await sauver(); };
+$("swTruc").onclick = async () => { reg.truc = !reg.truc; majReglages(); await sauver(); };
+$("rgVit").oninput = e => { reg.vit = parseFloat(e.target.value); majReglages(); };
+$("rgInt").oninput = e => { reg.int = parseFloat(e.target.value); majReglages(); };
+$("rgTps").oninput = e => { reg.tps = parseInt(e.target.value, 10); majReglages(); };
+$("rgObj").oninput = e => { reg.obj = parseInt(e.target.value, 10); majReglages(); peindre(); };
+["rgVit", "rgInt", "rgTps", "rgObj"].forEach(id => $(id).onchange = sauver);
+$("selDe").onchange = async e => { reg.vDe = e.target.value; vDe = VOIX.find(v => v.name === reg.vDe) || vDe; await sauver(); };
+$("selFr").onchange = async e => { reg.vFr = e.target.value; vFr = VOIX.find(v => v.name === reg.vFr) || vFr; await sauver(); };
+$("btnTestVoix").onclick = async () => { await dire("Voici la voix du professeur.", "fr"); await dire("Moien. Wéi geet et?", "de"); };
+$("btnDiag").onclick = () => diagnostic().catch(e => { logErreur("diagnostic", e); $("diag").textContent = "Le diagnostic a rencontré une erreur. Relance-le puis copie le résultat."; });
+$("btnCopyDiag").onclick = async () => {
+  const txt = derniereDiag || $("diag").innerText || "Diagnostic non lancé.";
+  try { await navigator.clipboard.writeText(txt); afficherToast("Diagnostic copié."); }
+  catch (_) { alert(txt); }
 };
-document.getElementById("rch").oninput = e => peindreLex(e.target.value);
-document.addEventListener("click", e => {
+$("btnUpdate").onclick = verifierMaj;
+$("btnUpdate2").onclick = verifierMaj;
+$("btnExport").onclick = exporter;
+$("btnImport").onclick = () => $("fileImport").click();
+$("fileImport").onchange = e => { if (e.target.files[0]) importer(e.target.files[0]); };
+$("raz").onclick = async () => {
+  if (!confirm("Effacer toute la progression, les favoris et l'historique ?")) return;
+  prog = {}; valides = {}; favoris = {}; jr = { seances: 0, minutes: 0, dernier: null, dernierKey: null, serie: 0, hist: {} };
+  await sauver(); peindre(); afficherToast("Progression effacée.");
+};
+$("rch").oninput = e => peindreLex(e.target.value);
+$("lexFiltres").onclick = e => {
+  const b = e.target.closest("[data-filtre]"); if (!b) return;
+  filtreLex = b.dataset.filtre;
+  $("lexFiltres").querySelectorAll("[data-filtre]").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  peindreLex($("rch").value);
+};
+document.addEventListener("click", async e => {
+  const fav = e.target.closest("[data-fav]");
+  if (fav) { const k = fav.dataset.fav; favoris[k] = !favoris[k]; if (!favoris[k]) delete favoris[k]; await sauver(); peindreLex($("rch").value); return; }
   const d = e.target.closest("[data-d]"); if (d) { dire(decodeURIComponent(d.dataset.d), "de"); return; }
   const dl = e.target.closest("[data-dial]"); if (dl) { jouerDialogue(parseInt(dl.dataset.dial, 10)); return; }
   const t = e.target.closest("[data-test]"); if (t) { lancerTest(parseInt(t.dataset.test, 10)); return; }
   const l = e.target.closest("[data-l]"); if (l && !l.disabled) ouvrir(parseInt(l.dataset.l, 10));
 });
 
-/* ---------- installation ---------- */
-let promptInstall = null;
-window.addEventListener("beforeinstallprompt", e => {
-  e.preventDefault(); promptInstall = e;
-  document.getElementById("btnInstall").style.display = "block";
-});
-document.getElementById("btnInstall").onclick = async () => {
-  if (!promptInstall) return;
-  promptInstall.prompt();
-  await promptInstall.userChoice;
-  promptInstall = null;
-  document.getElementById("btnInstall").style.display = "none";
-};
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+/* ---------- installation, connexion et mises à jour ---------- */
+let promptInstall = null, swReg = null, rechargerApresMaj = false;
+const estIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const estAndroid = () => /android/i.test(navigator.userAgent);
+function estInstallee() { return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true; }
+function majConnexion() {
+  const n = $("netStatus"); if (!n) return;
+  if (navigator.onLine) { n.textContent = "En ligne"; n.className = "net ok"; }
+  else { n.textContent = "Hors ligne"; n.className = "net ko"; }
 }
+function majInstallation() {
+  const inst = estInstallee(), state = $("installState"), help = $("installHelp"), b2 = $("btnInstall2"), b1 = $("btnInstall");
+  if (!state || !help) return;
+  if (inst) {
+    state.textContent = "Application installée";
+    help.textContent = "Tu l'utilises déjà comme une application autonome. Les cours restent disponibles hors ligne après leur mise en cache.";
+    if (b2) { b2.textContent = "Application déjà installée"; b2.disabled = true; }
+    if (b1) b1.style.display = "none";
+    return;
+  }
+  if (b2) { b2.disabled = false; b2.textContent = "Installer l'application"; }
+  if (promptInstall) {
+    state.textContent = "Installation disponible";
+    help.textContent = "Le navigateur peut installer directement l'application.";
+    if (b1) b1.style.display = "block";
+  } else if (estIOS()) {
+    state.textContent = "Installation manuelle sur iPhone";
+    help.textContent = "Dans Safari, touche Partager puis Sur l'écran d'accueil. iOS n'affiche pas toujours un bouton Installer dans la page.";
+    if (b1) b1.style.display = "none";
+  } else if (estAndroid()) {
+    state.textContent = "Installation depuis le menu du navigateur";
+    help.textContent = "Dans Chrome, ouvre le menu ⋮ puis Installer l'application ou Ajouter à l'écran d'accueil. Le bouton direct apparaît seulement si Chrome juge l'application installable.";
+    if (b1) b1.style.display = "none";
+  } else {
+    state.textContent = "Installation selon le navigateur";
+    help.textContent = "Utilise le menu du navigateur et cherche Installer l'application ou Ajouter à l'écran d'accueil.";
+    if (b1) b1.style.display = "none";
+  }
+}
+async function installer() {
+  if (estInstallee()) { afficherToast("L'application est déjà installée."); return; }
+  if (promptInstall) {
+    try {
+      promptInstall.prompt(); const choix = await promptInstall.userChoice;
+      if (choix && choix.outcome === "accepted") afficherToast("Installation lancée.");
+      promptInstall = null; majInstallation();
+    } catch (e) { logErreur("installation", e); afficherToast("Le navigateur n'a pas pu lancer l'installation. Utilise son menu."); }
+    return;
+  }
+  if (estIOS()) afficherToast("Sur iPhone : Safari, Partager, puis Sur l'écran d'accueil.");
+  else afficherToast("Ouvre le menu du navigateur puis choisis Installer l'application ou Ajouter à l'écran d'accueil.");
+}
+function afficherToast(message, actions = []) {
+  const t = $("toast"), txt = $("toastTxt"), zone = $("toastActions"); if (!t) return;
+  txt.textContent = message; zone.innerHTML = "";
+  actions.forEach((a, i) => { const b = document.createElement("button"); b.textContent = a.label; if (i === 0) b.className = "pri"; b.onclick = () => { t.classList.remove("on"); a.action(); }; zone.appendChild(b); });
+  t.classList.add("on");
+  if (!actions.length) setTimeout(() => t.classList.remove("on"), 5000);
+}
+function proposerMaj() {
+  if (!swReg || !swReg.waiting) return;
+  afficherToast("Une nouvelle version de l'application est prête.", [
+    { label: "Mettre à jour", action: () => { rechargerApresMaj = true; swReg.waiting.postMessage({ type: "SKIP_WAITING" }); } },
+    { label: "Plus tard", action: () => {} }
+  ]);
+}
+async function verifierMaj() {
+  if (!swReg) { afficherToast("Le service de mise à jour n'est pas encore prêt. Recharge la page puis réessaie."); return; }
+  try {
+    await swReg.update();
+    if (swReg.waiting) proposerMaj();
+    else afficherToast("Vérification terminée. Recharge l'application pour récupérer les derniers fichiers publiés.", [
+      { label: "Recharger", action: () => location.reload() },
+      { label: "Plus tard", action: () => {} }
+    ]);
+  } catch (e) { logErreur("mise à jour", e); afficherToast("Impossible de vérifier la mise à jour pour le moment."); }
+}
+async function initSW() {
+  if (!("serviceWorker" in navigator) || !(location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) return;
+  try {
+    swReg = await navigator.serviceWorker.register("sw.js?v=2.0.0", { scope: "./" });
+    if (swReg.waiting) proposerMaj();
+    swReg.addEventListener("updatefound", () => {
+      const w = swReg.installing; if (!w) return;
+      w.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) proposerMaj(); });
+    });
+  } catch (e) { logErreur("service worker", e); }
+}
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); promptInstall = e; majInstallation(); });
+window.addEventListener("appinstalled", () => { promptInstall = null; majInstallation(); afficherToast("Application installée."); });
+$("btnInstall").onclick = installer;
+$("btnInstall2").onclick = installer;
+window.addEventListener("online", () => { majConnexion(); if (swReg) swReg.update().catch(() => {}); });
+window.addEventListener("offline", majConnexion);
+if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("controllerchange", () => { if (rechargerApresMaj) location.reload(); });
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden && actif && !pause) { pause = true; $("bPau").textContent = "Reprendre"; try { speechSynthesis.pause(); } catch (_) {} }
+  if (!document.hidden && actif && !verrou) { try { if ("wakeLock" in navigator) verrou = await navigator.wakeLock.request("screen"); } catch (_) {} }
+});
+window.addEventListener("pagehide", fermerMicro);
 
+initSW();
 charger();

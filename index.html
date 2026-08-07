@@ -4,184 +4,33 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0A1017">
-<meta name="description" content="Cours oral de luxembourgeois pour les trajets en voiture. 100 heures, départ zéro.">
-<title>Lëtzebuergesch am Auto</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="description" content="Application progressive de luxembourgeois, hors ligne, avec écoute, révision, dialogues et suivi.">
+<title>Lëtzebuergesch am Auto · V2</title>
+<link rel="manifest" href="manifest.webmanifest?v=2.0.0">
+<link rel="icon" href="icon-192.png?v=2.0.0">
+<link rel="apple-touch-icon" href="icon-192.png?v=2.0.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lëtzebuergesch">
-<style>
-:root{
- --nuit:#0A1017;--tole:#121C28;--tole2:#1B2836;
- --or:#D8AC4E;--or2:rgba(216,172,78,.12);
- --ivoire:#F0EBE1;--brume:#8FA0B2;
- --vert:#57BE93;--rouge:#DB7A55;
- --dsp:Georgia,"Times New Roman",serif;
- --crp:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-}
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%}
-body{background:var(--nuit);color:var(--ivoire);font-family:var(--crp);-webkit-font-smoothing:antialiased}
-button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
-button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--or);outline-offset:3px}
-a{color:var(--or)}
-.env{max-width:780px;margin:0 auto;padding:22px 18px 110px}
-.tete{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-.mrq{font-family:var(--dsp);font-size:26px;font-weight:700;line-height:1.1}
-.mrq em{font-style:normal;color:var(--or)}
-.sous{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--brume);margin-top:4px}
-.cpt{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--or);text-align:right;line-height:1.6}
-.alerte{margin:16px 0;border:1px solid var(--rouge);background:rgba(219,122,85,.09);padding:13px;font-size:12.5px;line-height:1.65;display:none}
-.alerte.on{display:block}
-.alerte b{color:var(--rouge)}
-.avis{margin:16px 0 20px;border-left:2px solid var(--or);background:var(--or2);padding:11px 13px;font-size:12px;line-height:1.6}
-.ong{display:flex;gap:2px;border-bottom:1px solid var(--tole2);margin-bottom:22px;overflow-x:auto;scrollbar-width:none}
-.ong::-webkit-scrollbar{display:none}
-.tab{padding:11px 13px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--brume);border-bottom:2px solid transparent;white-space:nowrap}
-.tab[aria-selected="true"]{color:var(--or);border-color:var(--or)}
-.vue{display:none}.vue.on{display:block}
-.h{font-family:var(--dsp);font-size:21px;font-weight:700;margin:24px 0 9px}
-.h:first-child{margin-top:0}
-.h2{font-family:var(--dsp);font-size:17px;font-weight:700;margin:18px 0 8px}
-.p{font-size:13px;color:var(--brume);line-height:1.65;margin-bottom:14px}
-.p b{color:var(--ivoire);font-weight:600}
-.carte{background:linear-gradient(160deg,var(--tole) 0%,#0E1721 100%);border:1px solid var(--tole2);padding:18px;margin-bottom:14px}
-.carte .t{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--or);margin-bottom:9px}
-.carte .g{font-family:var(--dsp);font-size:22px;font-weight:700;line-height:1.3}
-.carte .s{font-size:12.5px;color:var(--brume);margin-top:7px;line-height:1.6}
-.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.dur{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
-.d{background:var(--tole);border:1px solid var(--tole2);padding:13px 4px;text-align:center}
-.d strong{display:block;font-family:var(--dsp);font-size:24px;font-weight:700;line-height:1}
-.d span{display:block;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--brume);margin-top:4px}
-.d[aria-pressed="true"]{border-color:var(--or);background:var(--tole2)}
-.d[aria-pressed="true"] strong{color:var(--or)}
-.go{width:100%;background:var(--or);color:#0A1017;font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;padding:20px}
-.sec{width:100%;border:1px solid var(--tole2);color:var(--brume);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;padding:14px;margin-top:8px}
-.sec:hover{border-color:var(--or);color:var(--or)}
-.note{font-size:11.5px;color:var(--brume);text-align:center;margin-top:10px;line-height:1.6}
-.bar{position:relative;height:30px;margin:16px 0 6px;background:var(--tole);overflow:hidden}
-.bar::before{content:"";position:absolute;top:50%;left:0;right:0;height:2px;transform:translateY(-50%);background:repeating-linear-gradient(90deg,var(--brume) 0 13px,transparent 13px 28px);opacity:.28}
-.barin{position:absolute;top:50%;left:0;height:3px;transform:translateY(-50%);background:var(--or);width:0;transition:width .5s}
-.barlbl{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brume)}
-.graph{display:flex;align-items:flex-end;gap:4px;height:80px;margin:14px 0 6px}
-.graph div{flex:1;background:var(--tole2);min-height:2px}
-.graph div.act{background:var(--or)}
-.etp{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--or);margin:22px 0 2px;padding-top:14px;border-top:1px solid var(--tole2)}
-.etp span{color:var(--brume)}
-.lc{border-top:1px solid var(--tole2);padding:12px 0;display:flex;align-items:center;gap:12px;width:100%;text-align:left}
-.lc:disabled{opacity:.35}
-.lcn{font-family:var(--dsp);font-size:17px;color:var(--or);width:24px;flex:none}
-.lcb{flex:1;min-width:0}
-.lct{font-size:14px}
-.lcm{font-size:10.5px;color:var(--brume);margin-top:3px}
-.badge{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;padding:4px 7px;border:1px solid var(--tole2);color:var(--brume);flex:none}
-.badge.ok{color:var(--vert);border-color:var(--vert)}
-.badge.now{color:var(--or);border-color:var(--or)}
-.jg{height:3px;background:var(--tole2);margin-top:6px}
-.jg span{display:block;height:100%;background:var(--vert);width:0}
-.rch{width:100%;background:var(--tole);border:1px solid var(--tole2);color:var(--ivoire);padding:12px 14px;font-family:inherit;font-size:14px;margin-bottom:14px}
-.f{border-top:1px solid var(--tole2);padding:11px 0;display:flex;align-items:center;gap:10px}
-.fb{flex:1;min-width:0}
-.flb{font-family:var(--dsp);font-size:19px;font-weight:700}
-.fph{font-size:11px;color:var(--or);margin-top:2px}
-.ffr{font-size:12.5px;color:var(--brume);margin-top:3px}
-.ftr{font-size:11.5px;color:var(--vert);margin-top:4px;line-height:1.5}
-.fst{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--brume);margin-top:4px}
-.fst.ok{color:var(--vert)}
-.mn{border:1px solid var(--tole2);padding:8px 10px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--brume);white-space:nowrap;text-decoration:none;display:inline-block}
-.ng{background:var(--tole);border-left:2px solid var(--vert);padding:12px 13px;font-size:13px;line-height:1.65;margin:12px 0}
-.dlg{border-top:1px solid var(--tole2);padding:14px 0}
-.dlg .rep{display:flex;gap:10px;margin-bottom:8px}
-.dlg .qui{font-family:var(--dsp);color:var(--or);width:18px;flex:none}
-.dlg .txt{flex:1}
-.dlg .lbx{font-size:14.5px}
-.dlg .frx{font-size:12px;color:var(--brume);margin-top:2px}
-.ret{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--brume);padding:8px 0;margin-bottom:6px}
-.opt{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--tole2);padding:14px 0}
-.opt-t{font-size:13.5px}
-.opt-d{font-size:11.5px;color:var(--brume);margin-top:3px;line-height:1.55}
-.sw{width:50px;height:28px;background:var(--tole2);border-radius:14px;position:relative;flex:none;transition:background .2s}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:11px;background:var(--brume);transition:transform .2s,background .2s}
-.sw[aria-pressed="true"]{background:var(--or2)}
-.sw[aria-pressed="true"]::after{transform:translateX(22px);background:var(--or)}
-.champ{border-top:1px solid var(--tole2);padding:14px 0}
-.champ label{display:block;font-size:13.5px;margin-bottom:4px}
-select{width:100%;background:var(--tole);border:1px solid var(--tole2);color:var(--ivoire);padding:12px;font-family:inherit;font-size:13.5px;margin-top:8px}
-input[type=range]{width:100%;accent-color:var(--or);height:32px;margin-top:6px}
-.diag{border:1px solid var(--tole2);background:var(--tole);padding:13px;font-size:12.5px;line-height:1.8;margin-top:10px}
-.diag b{color:var(--ivoire)}
-.ok{color:var(--vert)}.ko{color:var(--rouge)}
-.bloc{border-top:1px solid var(--tole2);padding:13px 0;display:flex;gap:12px;align-items:flex-start}
-.bloc-h{font-family:var(--dsp);font-size:16px;color:var(--or);width:52px;flex:none;padding-top:2px}
-.bloc-t{font-size:13.5px}
-.bloc-d{font-size:11.5px;color:var(--brume);margin-top:3px;line-height:1.55}
-.etape{display:flex;gap:11px;padding:11px 0;border-top:1px solid var(--tole2);font-size:13px;line-height:1.6}
-.etape b{color:var(--or);font-family:var(--dsp);font-size:16px;flex:none;width:18px}
-.cd{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 0%,#101B26 0%,var(--nuit) 60%);z-index:60;display:none;flex-direction:column;padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 14px)}
-.cd.on{display:flex}
-.cdh{display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--brume)}
-.qt{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--brume);padding:8px}
-.pist{position:relative;height:3px;background:var(--tole2);margin:12px 0 5px}
-.pist span{position:absolute;left:0;top:0;height:100%;background:var(--or);width:0;transition:width .4s}
-.pistl{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brume)}
-.ph{margin-top:20px;text-align:center;font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--brume);min-height:15px}
-.ph.on{color:var(--vert)}.ph.ko{color:var(--rouge)}.ph.or{color:var(--or)}
-.scn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:6px 0}
-.cs{font-size:clamp(17px,4.6vw,25px);color:var(--brume);line-height:1.4;max-width:640px}
-.lb{font-family:var(--dsp);font-weight:700;line-height:1.05;font-size:clamp(38px,12vw,84px);word-break:break-word;opacity:0;transition:opacity .25s}
-.lb.on{opacity:1}
-.phx{font-size:clamp(13px,3.4vw,18px);color:var(--or);letter-spacing:.04em;opacity:0;transition:opacity .25s}
-.phx.on{opacity:1}
-.fr{font-size:clamp(16px,4.3vw,25px);color:var(--brume);opacity:0;transition:opacity .25s}
-.fr.on{opacity:1}
-.ent{font-size:13.5px;color:var(--ivoire);min-height:19px;opacity:0;transition:opacity .2s}
-.ent.on{opacity:1}
-.micro{display:flex;align-items:center;gap:9px;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--vert);opacity:0;transition:opacity .2s}
-.micro.on{opacity:1}
-.pt{width:9px;height:9px;border-radius:50%;background:var(--vert);animation:pulse 1.1s infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.75)}}
-.an{width:70px;height:70px;opacity:0;transition:opacity .2s}
-.an.on{opacity:1}
-.an svg{transform:rotate(-90deg)}
-.an circle{fill:none;stroke-width:3}
-.an .pi{stroke:var(--tole2)}
-.an .av{stroke:var(--vert);stroke-linecap:round}
-.cmd{display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:8px;margin-top:10px}
-.c{background:var(--tole);border:1px solid var(--tole2);padding:19px 4px;text-align:center;font-size:10px;letter-spacing:.1em;text-transform:uppercase}
-.c.pr{background:var(--or);color:#0A1017;font-weight:700;border-color:var(--or)}
-.bn{background:var(--rouge);color:#0A1017;font-size:11.5px;padding:9px 13px;text-align:center;font-weight:700;display:none}
-.bn.on{display:block}
-.qz{position:fixed;inset:0;background:var(--nuit);z-index:70;display:none;flex-direction:column;padding:calc(env(safe-area-inset-top) + 14px) 18px calc(env(safe-area-inset-bottom) + 18px);overflow-y:auto}
-.qz.on{display:flex}
-.qz-h{display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brume)}
-.qz-q{font-family:var(--dsp);font-size:clamp(30px,9vw,52px);font-weight:700;text-align:center;margin:28px 0 6px;line-height:1.1}
-.qz-p{text-align:center;font-size:12px;color:var(--or);margin-bottom:22px}
-.qz-o{display:block;width:100%;background:var(--tole);border:1px solid var(--tole2);padding:17px 15px;text-align:left;font-size:14.5px;margin-bottom:9px}
-.qz-o.bon{border-color:var(--vert);color:var(--vert)}
-.qz-o.faux{border-color:var(--rouge);color:var(--rouge)}
-.qz-r{text-align:center;padding:40px 10px}
-.qz-r .sc{font-family:var(--dsp);font-size:60px;font-weight:700;color:var(--or)}
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-</style>
+<link rel="stylesheet" href="styles.css?v=2.0.0">
 </head>
 <body>
 <div class="env">
  <header class="tete">
   <div>
    <div class="mrq">Lëtzebuergesch <em>am Auto</em></div>
-   <div class="sous">Cours oral · 100 heures</div>
+   <div class="sous">Cours oral · progression adaptative</div>
+   <div class="ver">Version 2.0.0</div>
   </div>
-  <div class="cpt" id="cpt"></div>
+  <div style="text-align:right"><div class="cpt" id="cpt"></div><div class="net" id="netStatus">Connexion</div></div>
  </header>
 
  <div class="alerte" id="alerteMic"></div>
 
+ <div class="securite"><b>Sécurité.</b> Lance la séance avant de démarrer. Pendant le trajet, ne manipule pas l'écran.</div>
  <div class="avis">
-  <b>À vérifier.</b> Ce contenu vient de mes connaissances, pas d'une source officielle. Contrôle chaque leçon sur <a href="https://lod.lu" target="_blank" rel="noopener">lod.lu</a>.<br>
-  <b>Voix.</b> Aucune voix luxembourgeoise n'existe dans les téléphones. La voix utilisée est allemande, la prononciation entendue est approximative.
+  <b>Contenu.</b> Les mots et expressions restent à vérifier sur <a href="https://lod.lu" target="_blank" rel="noopener">lod.lu</a> avant une utilisation professionnelle.<br>
+  <b>Voix.</b> L'application utilise une voix Lëtzebuergesch si le téléphone en fournit une. Sinon elle utilise une voix allemande comme approximation.
  </div>
 
  <nav class="ong" role="tablist">
@@ -201,6 +50,7 @@ input[type=range]{width:100%;accent-color:var(--or);height:32px;margin-top:6px}
    <div class="g" id="procheT"></div>
    <div class="s" id="procheS"></div>
   </div>
+  <div class="obj"><div><div class="t">Objectif aujourd'hui</div><div class="s" id="objTxt">0 min aujourd'hui</div></div><div class="val" id="objVal">0%</div><div class="mini"><span id="objBar"></span></div></div>
   <div class="dur" id="dur">
    <button class="d" data-m="10" aria-pressed="false"><strong>10</strong><span>min</span></button>
    <button class="d" data-m="20" aria-pressed="true"><strong>20</strong><span>min</span></button>
@@ -259,19 +109,26 @@ input[type=range]{width:100%;accent-color:var(--or);height:32px;margin-top:6px}
  <section class="vue" id="v-lex">
   <div class="p">À consulter à l'arrêt. Le bouton lod.lu ouvre l'entrée officielle avec l'audio natif.</div>
   <input class="rch" id="rch" type="search" placeholder="Chercher en luxembourgeois ou en français" aria-label="Chercher">
+  <div class="filtres" id="lexFiltres">
+   <button class="filtre" data-filtre="tous" aria-pressed="true">Tout</button>
+   <button class="filtre" data-filtre="revoir" aria-pressed="false">À revoir</button>
+   <button class="filtre" data-filtre="solides" aria-pressed="false">Solides</button>
+   <button class="filtre" data-filtre="favoris" aria-pressed="false">Favoris</button>
+  </div>
   <div id="lexique"></div>
  </section>
 
  <section class="vue" id="v-voix">
   <div class="h">Diagnostic</div>
   <div class="p">Lance ce test une fois, à l'arrêt. Il te dira précisément ce qui marche et ce qui bloque.</div>
-  <button class="sec" id="btnDiag" style="margin-top:0">Lancer le diagnostic</button>
-  <div class="diag" id="diag">Test non lancé.</div>
+  <button class="sec" id="btnDiag" style="margin-top:0">Lancer le diagnostic complet</button>
+  <div class="rowbtn"><button class="sec" id="btnCopyDiag">Copier le diagnostic</button><button class="sec" id="btnUpdate">Chercher une mise à jour</button></div>
+  <div class="tech" id="diag">Test non lancé.</div>
 
   <div class="h">Correction quand tu répètes</div>
   <div class="opt">
-   <div><div class="opt-t">Reconnaissance vocale</div><div class="opt-d">Le téléphone écoute, te répète ce qu'il a entendu, puis te dit si c'est proche. Reconnaissance allemande faute de luxembourgeois. Demande une connexion.</div></div>
-   <button class="sw" id="swCor" aria-pressed="true" aria-label="Reconnaissance vocale"></button>
+   <div><div class="opt-t">Reconnaissance vocale</div><div class="opt-d">Fonction expérimentale. Une erreur de reconnaissance ne fait plus baisser ta progression.</div></div>
+   <button class="sw" id="swCor" aria-pressed="false" aria-label="Reconnaissance vocale"></button>
   </div>
   <div class="opt">
    <div><div class="opt-t">Écho de ta voix</div><div class="opt-d">Il enregistre ta répétition et te la rejoue juste avant le modèle. Tu t'entends, puis tu entends la bonne version. Fonctionne hors ligne.</div></div>
@@ -287,14 +144,16 @@ input[type=range]{width:100%;accent-color:var(--or);height:32px;margin-top:6px}
   </div>
 
   <div class="h">Réglages de la voix</div>
-  <div class="champ"><label for="selDe">Voix luxembourgeoise, jouée par une voix allemande</label>
-   <div class="opt-d">Les noms indiquent souvent homme ou femme.</div><select id="selDe"></select></div>
+  <div class="champ"><label for="selDe">Voix pour le luxembourgeois</label>
+   <div class="opt-d">Une voix Lëtzebuergesch est prioritaire. Sinon l’application utilise une voix allemande comme approximation.</div><select id="selDe"></select></div>
   <div class="champ"><label for="selFr">Voix du professeur, en français</label><select id="selFr"></select></div>
   <div class="champ"><label for="rgVit">Vitesse · <span id="vVit"></span></label><input type="range" id="rgVit" min="0.35" max="1.2" step="0.05"></div>
   <div class="champ"><label for="rgInt">Intonation · <span id="vInt"></span></label>
    <div class="opt-d">Grave à gauche, aigu à droite.</div><input type="range" id="rgInt" min="0.5" max="1.6" step="0.05"></div>
   <div class="champ"><label for="rgTps">Temps pour répondre · <span id="vTps"></span></label><input type="range" id="rgTps" min="2500" max="10000" step="500"></div>
   <button class="sec" id="btnTestVoix">Écouter un exemple</button>
+  <div class="h">Objectif quotidien</div>
+  <div class="champ"><label for="rgObj">Minutes par jour · <span id="vObj"></span></label><input type="range" id="rgObj" min="5" max="60" step="5"></div>
   <div class="h">Remise à zéro</div>
   <button class="sec" id="raz">Effacer toute la progression</button>
  </section>
@@ -327,7 +186,9 @@ input[type=range]{width:100%;accent-color:var(--or);height:32px;margin-top:6px}
 
  <section class="vue" id="v-install">
   <div class="h">Installer sur le téléphone</div>
-  <div class="p">Une fois la page publiée en HTTPS, ouvre-la sur ton téléphone.</div>
+  <div class="install-card"><div class="install-state" id="installState">Vérification…</div><div class="install-help" id="installHelp"></div></div>
+  <button class="go" id="btnInstall2">Installer l'application</button>
+  <button class="sec" id="btnUpdate2">Vérifier les mises à jour</button>
   <div class="h2">Android, Chrome</div>
   <div class="etape"><b>1</b><div>Ouvre l'adresse de la page.</div></div>
   <div class="etape"><b>2</b><div>Menu à trois points, puis Installer l'application, ou Ajouter à l'écran d'accueil.</div></div>
@@ -337,7 +198,7 @@ input[type=range]{width:100%;accent-color:var(--or);height:32px;margin-top:6px}
   <div class="etape"><b>2</b><div>Bouton Partager, puis Sur l'écran d'accueil.</div></div>
   <div class="etape"><b>3</b><div>Lance-la depuis l'icône. Autorise le micro.</div></div>
   <div class="h2">Le micro</div>
-  <div class="p">Le micro n'est autorisé que sur une adresse en HTTPS. Un fichier ouvert depuis Téléchargements ne fonctionnera pas. C'est la raison du refus, et la seule.</div>
+  <div class="p">Le micro fonctionne normalement sur une adresse HTTPS et sur localhost. Les autorisations du navigateur et du téléphone peuvent aussi le bloquer. Le diagnostic indique le point précis à vérifier.</div>
   <div class="h2">La voix hors ligne</div>
   <div class="p"><b>Android</b> : Réglages, Système, Langues, Synthèse vocale, installer l'allemand et le français.<br><br><b>iPhone</b> : Réglages, Accessibilité, Contenu énoncé, Voix, télécharger une voix allemande et une française.</div>
  </section>
@@ -370,7 +231,21 @@ input[type=range]{width:100%;accent-color:var(--or);height:32px;margin-top:6px}
  <div id="qzCorps"></div>
 </div>
 
-<script src="cours.js"></script>
-<script src="app.js"></script>
+<div class="sum" id="sum" role="dialog" aria-modal="true" aria-labelledby="sumTitre">
+ <div class="sum-card">
+  <div class="t">Bilan de séance</div><div class="h" id="sumTitre">Séance terminée</div>
+  <div class="sum-grid">
+   <div class="carte"><div class="t">Temps</div><div class="g" id="sumMin">0 min</div></div>
+   <div class="carte"><div class="t">Score vocal</div><div class="g" id="sumScore">—</div></div>
+   <div class="carte"><div class="t">Expressions solides</div><div class="g" id="sumSolides">0</div></div>
+   <div class="carte"><div class="t">À revoir</div><div class="g" id="sumDue">0</div></div>
+  </div>
+  <div class="p" id="sumMsg"></div>
+  <button class="go" id="sumClose">Continuer</button>
+ </div>
+</div>
+<div class="toast" id="toast"><div id="toastTxt"></div><div class="toast-actions" id="toastActions"></div></div>
+<script src="cours.js?v=2.0.0"></script>
+<script src="app.js?v=2.0.0"></script>
 </body>
 </html>

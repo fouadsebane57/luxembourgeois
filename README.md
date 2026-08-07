@@ -1,179 +1,183 @@
-# Lëtzebuergesch am Auto
+# Lëtzebuergesch am Auto, version 2.0.0
 
-Cours oral de luxembourgeois pour les trajets en voiture.
-35 leçons, 255 expressions, 10 dialogues, plan de 100 heures.
+Application progressive de luxembourgeois pensée pour l'écoute et la révision orale.
+
+Contenu actuel : 35 leçons, 255 expressions, 65 astuces de mémoire et 10 dialogues.
 
 Conçu par Fouad SEBANE.
 
----
+## Ce qui change dans la V2
 
-## AVERTISSEMENT
+1. Installation PWA plus claire sur Android et iPhone.
+2. Fonctionnement hors ligne renforcé.
+3. Gestion des mises à jour plus fiable.
+4. Diagnostic technique plus complet.
+5. Les erreurs JavaScript récentes sont conservées pour faciliter le dépannage.
+6. La reconnaissance vocale devient facultative et expérimentale.
+7. Une mauvaise reconnaissance vocale ne fait plus baisser la progression.
+8. L'écho de la voix reste disponible quand le navigateur le permet.
+9. Recherche d'une vraie voix Lëtzebuergesch sur l'appareil avant le recours à une voix allemande.
+10. Objectif quotidien réglable de 5 à 60 minutes.
+11. Bilan à la fin de chaque séance.
+12. Favoris dans le lexique.
+13. Filtres Tout, À revoir, Solides et Favoris.
+14. Sauvegarde V2 avec progression, réglages et favoris.
+15. Pause automatique si l'application passe en arrière plan pendant une séance.
+16. Indication En ligne ou Hors ligne sur l'écran principal.
 
-Le contenu vient de connaissances générales, **pas d'une source officielle**.
-Avant de travailler une leçon, vérifie ses mots sur **lod.lu**, le dictionnaire
-officiel du Zenter fir d'Lëtzebuerger Sprooch. Chaque mot a un lien direct dans
-l'application.
+## Important sur le contenu linguistique
 
-Aucune voix luxembourgeoise n'existe dans les téléphones. La voix utilisée est
-allemande. **La prononciation entendue est approximative.** Le modèle sonore de
-référence reste l'audio natif de lod.lu.
+Le moteur de l'application et le contenu linguistique sont séparés.
 
----
+Le fichier `cours.js` contient le cours. C'est le seul fichier à modifier pour corriger un mot, une traduction, une prononciation approchée, une astuce ou pour ajouter une leçon.
 
-## LES FICHIERS
+Avant une utilisation professionnelle, vérifie le contenu concerné sur `lod.lu`, le dictionnaire du Zenter fir d'Lëtzebuerger Sprooch.
+
+La synthèse vocale dépend des voix installées sur le téléphone. La V2 cherche d'abord une voix dont la langue est Lëtzebuergesch. Si elle n'en trouve pas, elle utilise une voix allemande comme approximation. L'audio de `lod.lu` reste utile pour contrôler la prononciation d'un mot.
+
+## Les fichiers
 
 | Fichier | Rôle |
-|---|---|
-| `index.html` | L'interface et les styles |
-| `cours.js` | **Tout le contenu du cours.** C'est le seul fichier à éditer pour ajouter ou corriger du vocabulaire |
-| `app.js` | Le moteur : séances, mémoire espacée, voix, micro |
-| `sw.js` | Rend l'application utilisable hors ligne |
-| `manifest.webmanifest` | Fait de la page une vraie application installable |
-| `icon-192.png`, `icon-512.png` | L'icône sur l'écran d'accueil |
+| --- | --- |
+| `index.html` | Structure de l'application |
+| `styles.css` | Présentation et affichage mobile |
+| `cours.js` | Contenu du cours |
+| `app.js` | Progression, séances, voix, micro, diagnostic et interface |
+| `sw.js` | Hors ligne et cache |
+| `manifest.webmanifest` | Installation comme application |
+| `icon-192.png` | Petite icône |
+| `icon-512.png` | Grande icône |
+| `README.md` | Mode d'emploi |
 
-Les six fichiers doivent rester **dans le même dossier**, sans sous-dossier.
+Tous ces fichiers doivent être placés directement à la racine du dépôt GitHub `luxembourgeois`.
 
----
+## Mettre la V2 sur ton GitHub actuel
 
-## ÉTAPE 1 · SUR L'ORDINATEUR, PUBLIER LA PAGE
+Ton dépôt existe déjà. Tu n'as pas besoin d'en créer un autre.
 
-Le micro n'est autorisé par les navigateurs que sur une adresse en **HTTPS**.
-C'est la seule raison pour laquelle la correction vocale ne fonctionnait pas.
-Il faut donc publier la page. C'est gratuit et définitif.
+1. Ouvre ton dépôt `luxembourgeois` sur GitHub.
+2. Clique sur `Add file`, puis `Upload files`.
+3. Dépose les fichiers de cette V2 directement dans la page.
+4. GitHub détectera les fichiers modifiés et le nouveau fichier `styles.css`.
+5. Clique sur `Commit changes`.
+6. Attends environ une minute.
+7. Ouvre ton application GitHub Pages.
+8. Dans l'application, va dans `Installer`, puis `Vérifier les mises à jour`.
+9. Choisis `Recharger`.
 
-### 1. Créer un compte GitHub
-Va sur `github.com`, clique **Sign up**. Adresse e-mail, mot de passe, nom
-d'utilisateur. Confirme l'e-mail.
+GitHub Pages doit rester configuré sur la branche principale, avec le dossier racine.
 
-### 2. Créer le dépôt
-En haut à droite, bouton **+**, puis **New repository**.
-- Repository name : `luxembourgeois`
-- Coche **Public**
-- Ne coche rien d'autre
-- **Create repository**
+## Installer sur Android
 
-### 3. Envoyer les fichiers
-Sur la page du dépôt, clique **uploading an existing file**
-(ou **Add file** puis **Upload files**).
-Glisse les **six fichiers** dans la zone. Pas le dossier, les fichiers.
-En bas, bouton vert **Commit changes**.
+1. Ouvre l'adresse GitHub Pages dans Chrome.
+2. Va dans l'onglet `Installer` de l'application.
+3. Si le bouton direct est disponible, touche `Installer l'application`.
+4. Si Chrome ne propose pas le bouton direct, ouvre le menu à trois points.
+5. Choisis `Installer l'application` ou `Ajouter à l'écran d'accueil` selon ce que Chrome affiche.
 
-### 4. Activer la publication
-Onglet **Settings** en haut du dépôt, puis **Pages** dans la colonne de gauche.
-- Source : **Deploy from a branch**
-- Branch : **main**, dossier **/ (root)**
-- **Save**
+Le bouton d'installation n'est pas garanti sur tous les téléphones. L'application indique maintenant la procédure adaptée au navigateur.
 
-### 5. Récupérer l'adresse
-Attends une à deux minutes, puis recharge la page Settings > Pages.
-Une adresse apparaît, de la forme :
+## Installer sur iPhone
 
-```
-https://TON-NOM.github.io/luxembourgeois/
-```
+1. Ouvre l'adresse dans Safari.
+2. Touche `Partager`.
+3. Choisis `Sur l'écran d'accueil`.
+4. Confirme avec `Ajouter`.
 
-Ouvre-la sur l'ordinateur pour vérifier que tout s'affiche.
-Envoie-toi l'adresse par mail ou par message, tu en auras besoin sur le téléphone.
+Sur iPhone, il est normal que la page ne présente pas toujours un bouton d'installation automatique.
 
----
+## Diagnostic technique
 
-## ÉTAPE 2 · SUR LE TÉLÉPHONE, INSTALLER
+Va dans `Voix et micro`, puis lance `Lancer le diagnostic complet` à l'arrêt.
 
-### Android, avec Chrome
-1. Ouvre l'adresse dans **Chrome**.
-2. Menu à trois points, puis **Installer l'application**. Si l'option n'apparaît
-   pas, prends **Ajouter à l'écran d'accueil**.
-3. Lance l'application depuis l'icône.
+Le diagnostic contrôle notamment :
 
-### iPhone, avec Safari
-1. Ouvre l'adresse dans **Safari**, pas dans une autre application.
-2. Bouton **Partager**, puis **Sur l'écran d'accueil**.
-3. Lance l'application depuis l'icône.
+1. La version de l'application.
+2. L'adresse sécurisée.
+3. La connexion.
+4. Le mode installé.
+5. Le stockage de la progression.
+6. Le service worker.
+7. La synthèse vocale.
+8. La voix utilisée pour le luxembourgeois.
+9. La voix française.
+10. La permission du micro.
+11. L'enregistrement audio.
+12. La reconnaissance vocale.
+13. La dernière erreur JavaScript enregistrée, s'il y en a une.
 
----
+Le bouton `Copier le diagnostic` permet d'envoyer facilement le résultat en cas de problème.
 
-## ÉTAPE 3 · PRÉPARER LA VOIX ET LE MICRO
+## La reconnaissance vocale
 
-### Installer les voix, une seule fois
-**Android** : Réglages > Système > Langues et saisie > Synthèse vocale >
-Installer les données vocales > **Allemand** et **Français**.
+La reconnaissance vocale des navigateurs n'est pas considérée comme une mesure fiable de la prononciation luxembourgeoise.
 
-**iPhone** : Réglages > Accessibilité > Contenu énoncé > Voix >
-télécharger une voix **allemande** et une voix **française**.
+Dans la V2 :
 
-Sans ces voix, l'application reste muette hors ligne.
+1. Elle est facultative.
+2. Elle sert uniquement de retour indicatif.
+3. Un mauvais résultat vocal ne fait plus perdre de niveau à une expression.
+4. Le test écrit continue à avoir un effet sur la progression, car la réponse y est explicite.
+5. L'écho vocal permet de s'entendre puis de comparer avec le modèle.
 
-### Lancer le diagnostic
-Dans l'application, onglet **Voix et micro**, bouton **Lancer le diagnostic**.
-Fais-le **à l'arrêt**. Autorise le micro quand le téléphone le demande.
+## Objectif quotidien
 
-Le diagnostic vérifie sept points et te dit exactement lequel bloque.
-Toutes les lignes doivent être vertes, sauf éventuellement la reconnaissance
-vocale si tu n'as pas de réseau.
+Dans `Voix et micro`, règle l'objectif entre 5 et 60 minutes.
 
----
+L'écran principal affiche :
 
-## ÉTAPE 4 · LA PREMIÈRE SÉANCE
+1. Les minutes réalisées aujourd'hui.
+2. L'objectif choisi.
+3. Le pourcentage atteint.
 
-Ne commence pas par soixante minutes.
+## Favoris et lexique
 
-- **Jour 1** : 10 minutes, leçon 1, les chiffres de zéro à cinq.
-- **Jour 2 à 5** : 20 minutes le matin, 20 minutes le soir en mode Retour.
-- **À partir de la semaine 2** : 60 minutes à l'aller, 60 au retour.
+Dans le lexique, touche l'étoile à côté d'une expression pour l'ajouter aux favoris.
 
-Lance la séance **avant de démarrer la voiture**. Ensuite tu ne touches plus
-le téléphone jusqu'à l'arrivée.
+Quatre filtres sont disponibles :
 
----
+1. Tout.
+2. À revoir.
+3. Solides.
+4. Favoris.
 
-## LES CINQ MODES
+## Sauvegarde de la progression
 
-| Mode | Quand |
-|---|---|
-| **Aller** | Séance principale. Nouveaux mots et rappels |
-| **Retour** | Le soir. Consolidation de la journée, aucun mot nouveau |
-| **Jeu** | 5 minutes de série rapide, score annoncé |
-| **Chiffres au hasard** | Entraînement pur sur les nombres |
-| **Écoute libre** | Jour de fatigue ou trafic dense. Rien à dire |
+Dans `Suivi` :
 
----
+1. `Exporter ma progression` crée un fichier JSON.
+2. `Importer une sauvegarde` restaure la progression.
 
-## CORRIGER OU AJOUTER DU VOCABULAIRE
+La sauvegarde V2 contient la progression, les leçons validées, l'historique, les réglages et les favoris.
 
-Ouvre `cours.js` dans un éditeur de texte. Chaque expression a cette forme :
+Les anciennes sauvegardes V1 restent acceptées si elles contiennent les données principales attendues.
 
-```js
-{lb:"Moien", fr:"bonjour, salut", ph:"mo-ï-eune", tr:"Moien contient moi."}
-```
+## Modifier uniquement le cours plus tard
 
-- `lb` : le luxembourgeois, tel qu'il s'écrit
-- `fr` : la traduction française
-- `ph` : la prononciation approchée pour un francophone
-- `tr` : astuce de mémoire, facultative
+Pour corriger un mot ou ajouter une leçon :
 
-Pour ajouter une leçon, copie un bloc existant et modifie-le.
-Réenvoie ensuite le fichier sur GitHub, **Add file > Upload files**, et
-**augmente le numéro de version dans `sw.js`** (`lux-v1` devient `lux-v2`),
-sinon les téléphones garderont l'ancienne version en cache.
+1. Modifie uniquement `cours.js`.
+2. Vérifie la syntaxe du bloc modifié.
+3. Sur GitHub, remplace `cours.js` par la nouvelle version.
+4. Valide avec `Commit changes`.
+5. Dans l'application, ouvre `Installer`.
+6. Touche `Vérifier les mises à jour`.
+7. Choisis `Recharger`.
 
----
+Le service hors ligne utilise le réseau en priorité quand il est disponible. Si le téléphone est hors ligne, il utilise la dernière version mise en cache.
 
-## SAUVEGARDER LA PROGRESSION
+## Sécurité pendant un trajet
 
-La progression vit sur l'appareil. Onglet **Suivi**, bas de page :
-**Exporter ma progression** produit un fichier JSON.
-**Importer une sauvegarde** le restaure, y compris sur un autre téléphone.
+Lance la séance avant de démarrer. Pendant le trajet, ne manipule pas l'écran.
 
-Fais-le une fois par mois. Vider les données du navigateur efface tout.
+Si l'application passe en arrière plan pendant une séance, la V2 met automatiquement la séance en pause. Il faut la reprendre volontairement à l'écran.
 
----
+## En cas de bug
 
-## APRÈS LES 100 HEURES
+1. Ouvre `Voix et micro`.
+2. Lance le diagnostic.
+3. Touche `Copier le diagnostic`.
+4. Note aussi le modèle du téléphone et le navigateur utilisé.
+5. Si le problème est apparu après une mise à jour, va dans `Installer`, puis `Vérifier les mises à jour`, puis `Recharger`.
 
-Inscription à l'**Institut national des langues Luxembourg**, `inll.lu`.
-Tu n'y arriveras pas débutant total, mais avec une base. La différence est
-considérable.
-
-L'INLL publie aussi **Poterkëscht**, un podcast en luxembourgeois pour
-apprenants. Radio 100,7 diffuse en luxembourgeois toute la journée.
-Ces deux ressources complètent bien les trajets.
+Ne réinitialise la progression qu'en dernier recours. Exporte une sauvegarde avant toute remise à zéro si tu veux conserver les données.
