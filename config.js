@@ -1,25 +1,30 @@
 /*
   CONFIGURATION PUBLIQUE
-  L'application fonctionne sans configuration en mode local.
-  Pour les comptes, abonnements et la reconnaissance cloud, renseigne Supabase.
-  Ne mets JAMAIS de clé Stripe secrète ou de clé Google privée dans ce fichier.
+  Ne jamais mettre de clé Stripe secrète, Google privée
+  ou Supabase sb_secret_ dans ce fichier.
 */
 window.LETZ_CONFIG = {
   appVersion: "4.0.0",
   appName: "Lëtzebuergesch am Auto",
-  supabaseUrl: "",
-  supabaseAnonKey: "",
-  functionsBaseUrl: "",
+
+  supabaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co",
+
+  supabaseAnonKey: "sb_publishable_RS1iTvozqjWlmE4OOtx6Wg_oOv5FDKJ",
+
+  functionsBaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co/functions/v1",
+
   pricing: {
     monthly: 7.99,
     yearly: 59.99,
     currency: "EUR"
   },
+
   free: {
     lessons: 8,
     maxSessionMinutes: 20,
     cloudSpeechTestsPerMonth: 5
   },
+
   supportEmail: "",
   legalBusinessName: "À COMPLÉTER"
 };
