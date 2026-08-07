@@ -1,65 +1,42 @@
-/* Lëtzebuergesch am Auto · service worker V2 */
-const VERSION = "lux-v2-20260807-1";
+const VERSION = "letz-revolution-4.0.0";
 const CORE = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./cours.js",
-  "./app.js",
-  "./manifest.webmanifest",
-  "./icon-192.png",
-  "./icon-512.png"
+  "./styles.css?v=4.0.0",
+  "./app.js?v=4.0.0",
+  "./config.js?v=4.0.0",
+  "./cours.js?v=4.0.0",
+  "./manifest.webmanifest?v=4.0.0",
+  "./icon-192.png?v=4.0.0",
+  "./icon-512.png?v=4.0.0",
+  "./legal.html",
+  "./privacy.html",
+  "./terms.html"
 ];
-
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(CORE)));
+  event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
 });
-
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key !== VERSION).map(key => caches.delete(key))))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
-
-self.addEventListener("message", event => {
-  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
-});
-
-async function navigation(request) {
-  const cache = await caches.open(VERSION);
-  try {
-    const response = await Promise.race([
-      fetch(request),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 4500))
-    ]);
-    if (response && response.ok) cache.put("./index.html", response.clone()).catch(() => {});
-    return response;
-  } catch (_) {
-    return (await cache.match("./index.html", { ignoreSearch: true })) || Response.error();
-  }
-}
-
-async function staticAsset(request) {
-  const cache = await caches.open(VERSION);
-  try {
-    const response = await Promise.race([
-      fetch(request),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3500))
-    ]);
-    if (response && response.ok && response.type === "basic") cache.put(request, response.clone()).catch(() => {});
-    return response;
-  } catch (_) {
-    return (await cache.match(request)) || (await cache.match(request, { ignoreSearch: true })) || Response.error();
-  }
-}
-
 self.addEventListener("fetch", event => {
-  const request = event.request;
-  if (request.method !== "GET") return;
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
-  if (request.mode === "navigate") event.respondWith(navigation(request));
-  else event.respondWith(staticAsset(request));
+  if (event.request.method !== "GET") return;
+  const url = new URL(event.request.url);
+  if (url.origin !== location.origin) return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request).then(r => {
+      const copy = r.clone(); caches.open(VERSION).then(c => c.put("./index.html", copy)); return r;
+    }).catch(() => caches.match("./index.html")));
+    return;
+  }
+  event.respondWith(caches.match(event.request).then(cached => {
+    const network = fetch(event.request).then(r => {
+      if (r && r.ok) caches.open(VERSION).then(c => c.put(event.request, r.clone()));
+      return r;
+    }).catch(() => cached);
+    return cached || network;
+  }));
+});
+self.addEventListener("message", event => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });

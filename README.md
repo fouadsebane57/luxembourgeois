@@ -1,183 +1,79 @@
-# Lëtzebuergesch am Auto, version 2.0.0
+# Lëtzebuergesch am Auto · REVOLUTION 4.0
 
-Application progressive de luxembourgeois pensée pour l'écoute et la révision orale.
+Cette version transforme le prototype en base de produit commercial.
 
-Contenu actuel : 35 leçons, 255 expressions, 65 astuces de mémoire et 10 dialogues.
+Elle fonctionne immédiatement en mode local sur GitHub Pages. Les fonctions commerciales sont séparées du frontend pour qu'aucun secret Stripe ou Google ne soit exposé dans le navigateur.
 
-Conçu par Fouad SEBANE.
+## Ce qui fonctionne sans aucun compte
 
-## Ce qui change dans la V2
+- PWA installable.
+- 35 leçons et 255 expressions actuelles.
+- Mode trajet intelligent.
+- Révisions espacées.
+- Sprint oral.
+- Chiffres.
+- Écoute libre.
+- Lexique, favoris et recherche.
+- Progression et statistiques.
+- Export et import.
+- Synthèse vocale locale.
+- Écho de la voix.
+- Reconnaissance du navigateur en secours.
+- Migration de la progression des versions précédentes.
 
-1. Installation PWA plus claire sur Android et iPhone.
-2. Fonctionnement hors ligne renforcé.
-3. Gestion des mises à jour plus fiable.
-4. Diagnostic technique plus complet.
-5. Les erreurs JavaScript récentes sont conservées pour faciliter le dépannage.
-6. La reconnaissance vocale devient facultative et expérimentale.
-7. Une mauvaise reconnaissance vocale ne fait plus baisser la progression.
-8. L'écho de la voix reste disponible quand le navigateur le permet.
-9. Recherche d'une vraie voix Lëtzebuergesch sur l'appareil avant le recours à une voix allemande.
-10. Objectif quotidien réglable de 5 à 60 minutes.
-11. Bilan à la fin de chaque séance.
-12. Favoris dans le lexique.
-13. Filtres Tout, À revoir, Solides et Favoris.
-14. Sauvegarde V2 avec progression, réglages et favoris.
-15. Pause automatique si l'application passe en arrière plan pendant une séance.
-16. Indication En ligne ou Hors ligne sur l'écran principal.
+## Ce qui devient disponible après configuration du backend
 
-## Important sur le contenu linguistique
+- Création de comptes.
+- Synchronisation multi-appareils.
+- Abonnement Premium mensuel et annuel.
+- Stripe Checkout.
+- Portail client Stripe.
+- Mise à jour automatique de l'accès Premium par webhook.
+- Reconnaissance cloud du luxembourgeois avec Google Cloud Speech-to-Text V2, modèle Chirp 2, locale lb-LU.
+- Quota d'essai cloud pour les comptes gratuits.
 
-Le moteur de l'application et le contenu linguistique sont séparés.
+## Architecture
 
-Le fichier `cours.js` contient le cours. C'est le seul fichier à modifier pour corriger un mot, une traduction, une prononciation approchée, une astuce ou pour ajouter une leçon.
+Frontend : GitHub Pages ou autre hébergeur statique.
 
-Avant une utilisation professionnelle, vérifie le contenu concerné sur `lod.lu`, le dictionnaire du Zenter fir d'Lëtzebuerger Sprooch.
+Backend : Supabase Auth, Postgres, RLS et Edge Functions.
 
-La synthèse vocale dépend des voix installées sur le téléphone. La V2 cherche d'abord une voix dont la langue est Lëtzebuergesch. Si elle n'en trouve pas, elle utilise une voix allemande comme approximation. L'audio de `lod.lu` reste utile pour contrôler la prononciation d'un mot.
+Paiement : Stripe Billing + Checkout + Customer Portal.
 
-## Les fichiers
+Reconnaissance cloud : Google Cloud Speech-to-Text V2.
 
-| Fichier | Rôle |
-| --- | --- |
-| `index.html` | Structure de l'application |
-| `styles.css` | Présentation et affichage mobile |
-| `cours.js` | Contenu du cours |
-| `app.js` | Progression, séances, voix, micro, diagnostic et interface |
-| `sw.js` | Hors ligne et cache |
-| `manifest.webmanifest` | Installation comme application |
-| `icon-192.png` | Petite icône |
-| `icon-512.png` | Grande icône |
-| `README.md` | Mode d'emploi |
+Contenu linguistique : `cours.js` reste la source actuelle. Pour une commercialisation, chaque expression doit être relue et validée avec une source linguistique fiable, notamment le Lëtzebuerger Online Dictionnaire du Zenter fir d'Lëtzebuerger Sprooch.
 
-Tous ces fichiers doivent être placés directement à la racine du dépôt GitHub `luxembourgeois`.
+## Ordre de mise en ligne recommandé
 
-## Mettre la V2 sur ton GitHub actuel
+1. Tester cette version en local sur ton téléphone.
+2. Remplacer les fichiers du dépôt GitHub par ceux de ce dossier.
+3. Vérifier la PWA, les leçons, le micro et les sessions.
+4. Créer Supabase et exécuter `supabase/schema.sql`.
+5. Créer Stripe en mode test et créer deux prix récurrents.
+6. Créer Google Cloud Speech-to-Text.
+7. Déployer les Edge Functions.
+8. Renseigner uniquement les valeurs publiques dans `config.js`.
+9. Tester comptes, abonnement et reconnaissance cloud.
+10. Compléter les pages juridiques.
+11. Vérifier les prix, la TVA et les règles consommateurs applicables.
+12. Passer Stripe en production seulement après les tests.
 
-Ton dépôt existe déjà. Tu n'as pas besoin d'en créer un autre.
+Lis `docs/DEPLOIEMENT_COMPLET.md` pour les étapes exactes.
 
-1. Ouvre ton dépôt `luxembourgeois` sur GitHub.
-2. Clique sur `Add file`, puis `Upload files`.
-3. Dépose les fichiers de cette V2 directement dans la page.
-4. GitHub détectera les fichiers modifiés et le nouveau fichier `styles.css`.
-5. Clique sur `Commit changes`.
-6. Attends environ une minute.
-7. Ouvre ton application GitHub Pages.
-8. Dans l'application, va dans `Installer`, puis `Vérifier les mises à jour`.
-9. Choisis `Recharger`.
+## Sécurité importante
 
-GitHub Pages doit rester configuré sur la branche principale, avec le dossier racine.
+Ne mets jamais dans `config.js` :
 
-## Installer sur Android
+- la clé secrète Stripe ;
+- le secret du webhook Stripe ;
+- la clé Supabase service role ;
+- la clé privée du compte de service Google.
 
-1. Ouvre l'adresse GitHub Pages dans Chrome.
-2. Va dans l'onglet `Installer` de l'application.
-3. Si le bouton direct est disponible, touche `Installer l'application`.
-4. Si Chrome ne propose pas le bouton direct, ouvre le menu à trois points.
-5. Choisis `Installer l'application` ou `Ajouter à l'écran d'accueil` selon ce que Chrome affiche.
+Ces valeurs vont uniquement dans les secrets des Edge Functions.
 
-Le bouton d'installation n'est pas garanti sur tous les téléphones. L'application indique maintenant la procédure adaptée au navigateur.
+## Statut de cette version
 
-## Installer sur iPhone
+Le frontend est un prototype avancé et fonctionnel. L'architecture de paiement et de reconnaissance cloud est fournie, mais elle doit être configurée avec tes propres comptes de services avant de pouvoir encaisser de vrais abonnements.
 
-1. Ouvre l'adresse dans Safari.
-2. Touche `Partager`.
-3. Choisis `Sur l'écran d'accueil`.
-4. Confirme avec `Ajouter`.
-
-Sur iPhone, il est normal que la page ne présente pas toujours un bouton d'installation automatique.
-
-## Diagnostic technique
-
-Va dans `Voix et micro`, puis lance `Lancer le diagnostic complet` à l'arrêt.
-
-Le diagnostic contrôle notamment :
-
-1. La version de l'application.
-2. L'adresse sécurisée.
-3. La connexion.
-4. Le mode installé.
-5. Le stockage de la progression.
-6. Le service worker.
-7. La synthèse vocale.
-8. La voix utilisée pour le luxembourgeois.
-9. La voix française.
-10. La permission du micro.
-11. L'enregistrement audio.
-12. La reconnaissance vocale.
-13. La dernière erreur JavaScript enregistrée, s'il y en a une.
-
-Le bouton `Copier le diagnostic` permet d'envoyer facilement le résultat en cas de problème.
-
-## La reconnaissance vocale
-
-La reconnaissance vocale des navigateurs n'est pas considérée comme une mesure fiable de la prononciation luxembourgeoise.
-
-Dans la V2 :
-
-1. Elle est facultative.
-2. Elle sert uniquement de retour indicatif.
-3. Un mauvais résultat vocal ne fait plus perdre de niveau à une expression.
-4. Le test écrit continue à avoir un effet sur la progression, car la réponse y est explicite.
-5. L'écho vocal permet de s'entendre puis de comparer avec le modèle.
-
-## Objectif quotidien
-
-Dans `Voix et micro`, règle l'objectif entre 5 et 60 minutes.
-
-L'écran principal affiche :
-
-1. Les minutes réalisées aujourd'hui.
-2. L'objectif choisi.
-3. Le pourcentage atteint.
-
-## Favoris et lexique
-
-Dans le lexique, touche l'étoile à côté d'une expression pour l'ajouter aux favoris.
-
-Quatre filtres sont disponibles :
-
-1. Tout.
-2. À revoir.
-3. Solides.
-4. Favoris.
-
-## Sauvegarde de la progression
-
-Dans `Suivi` :
-
-1. `Exporter ma progression` crée un fichier JSON.
-2. `Importer une sauvegarde` restaure la progression.
-
-La sauvegarde V2 contient la progression, les leçons validées, l'historique, les réglages et les favoris.
-
-Les anciennes sauvegardes V1 restent acceptées si elles contiennent les données principales attendues.
-
-## Modifier uniquement le cours plus tard
-
-Pour corriger un mot ou ajouter une leçon :
-
-1. Modifie uniquement `cours.js`.
-2. Vérifie la syntaxe du bloc modifié.
-3. Sur GitHub, remplace `cours.js` par la nouvelle version.
-4. Valide avec `Commit changes`.
-5. Dans l'application, ouvre `Installer`.
-6. Touche `Vérifier les mises à jour`.
-7. Choisis `Recharger`.
-
-Le service hors ligne utilise le réseau en priorité quand il est disponible. Si le téléphone est hors ligne, il utilise la dernière version mise en cache.
-
-## Sécurité pendant un trajet
-
-Lance la séance avant de démarrer. Pendant le trajet, ne manipule pas l'écran.
-
-Si l'application passe en arrière plan pendant une séance, la V2 met automatiquement la séance en pause. Il faut la reprendre volontairement à l'écran.
-
-## En cas de bug
-
-1. Ouvre `Voix et micro`.
-2. Lance le diagnostic.
-3. Touche `Copier le diagnostic`.
-4. Note aussi le modèle du téléphone et le navigateur utilisé.
-5. Si le problème est apparu après une mise à jour, va dans `Installer`, puis `Vérifier les mises à jour`, puis `Recharger`.
-
-Ne réinitialise la progression qu'en dernier recours. Exporte une sauvegarde avant toute remise à zéro si tu veux conserver les données.
+Les pages `legal.html`, `privacy.html` et `terms.html` sont des modèles de travail, pas des textes juridiques finaux.

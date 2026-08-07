@@ -1,251 +1,265 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0A1017">
-<meta name="description" content="Application progressive de luxembourgeois, hors ligne, avec écoute, révision, dialogues et suivi.">
-<title>Lëtzebuergesch am Auto · V2</title>
-<link rel="manifest" href="manifest.webmanifest?v=2.0.0">
-<link rel="icon" href="icon-192.png?v=2.0.0">
-<link rel="apple-touch-icon" href="icon-192.png?v=2.0.0">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Lëtzebuergesch">
-<link rel="stylesheet" href="styles.css?v=2.0.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#08131f">
+  <meta name="description" content="Lëtzebuergesch am Auto, apprentissage oral du luxembourgeois pensé pour les trajets.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lëtzebuergesch">
+  <title>Lëtzebuergesch am Auto · Revolution</title>
+  <link rel="manifest" href="manifest.webmanifest?v=4.0.0">
+  <link rel="icon" href="icon-192.png?v=4.0.0">
+  <link rel="apple-touch-icon" href="icon-192.png?v=4.0.0">
+  <link rel="stylesheet" href="styles.css?v=4.0.0">
 </head>
 <body>
-<div class="env">
- <header class="tete">
-  <div>
-   <div class="mrq">Lëtzebuergesch <em>am Auto</em></div>
-   <div class="sous">Cours oral · progression adaptative</div>
-   <div class="ver">Version 2.0.0</div>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <div id="offlineBar" class="offline-bar" hidden>Mode hors ligne actif. Les fonctions cloud sont temporairement indisponibles.</div>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navigation principale">
+      <div class="brand-wrap">
+        <button class="brand" data-route="home" aria-label="Accueil">
+          <span class="brand-mark">L</span>
+          <span><strong>Lëtzebuergesch</strong><small>am Auto</small></span>
+        </button>
+        <span class="version-badge">REVOLUTION 4.0</span>
+      </div>
+
+      <nav class="side-nav">
+        <button class="nav-item active" data-route="home"><span>⌂</span><b>Accueil</b></button>
+        <button class="nav-item" data-route="learn"><span>▶</span><b>Apprendre</b></button>
+        <button class="nav-item" data-route="courses"><span>▦</span><b>Parcours</b></button>
+        <button class="nav-item" data-route="practice"><span>◉</span><b>S'entraîner</b></button>
+        <button class="nav-item" data-route="progress"><span>↗</span><b>Progression</b></button>
+        <button class="nav-item" data-route="voice"><span>◌</span><b>Voix et micro</b></button>
+        <button class="nav-item" data-route="premium"><span>✦</span><b>Premium</b></button>
+        <button class="nav-item" data-route="account"><span>◎</span><b>Compte</b></button>
+      </nav>
+
+      <div class="side-bottom">
+        <div class="plan-chip" id="sidePlanChip"><span class="dot"></span><div><small>Formule</small><strong id="sidePlanName">Découverte</strong></div></div>
+        <button class="ghost full" id="installBtnSide" hidden>Installer l'application</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="pageEyebrow">BONJOUR</p>
+          <h1 id="pageTitle">Ton trajet devient ton cours.</h1>
+        </div>
+        <div class="top-actions">
+          <div class="streak-pill" title="Jours consécutifs"><span>🔥</span><strong id="streakTop">0</strong></div>
+          <button class="avatar-btn" data-route="account" id="avatarBtn">F</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-home" data-view="home">
+        <div class="hero-grid">
+          <article class="hero-card">
+            <div class="hero-copy">
+              <p class="kicker">MODE TRAJET</p>
+              <h2>Pose le téléphone.<br>Parle. Écoute. Progresse.</h2>
+              <p>Une séance orale qui avance seule, s'adapte à tes réponses et remet au bon moment ce que tu oublies.</p>
+              <div class="hero-actions">
+                <button class="primary big" id="startSmartHome">Démarrer ma séance</button>
+                <button class="secondary big" data-route="voice">Tester ma voix</button>
+              </div>
+              <div class="safety-line">À lancer avant de démarrer. Aucun écran à manipuler pendant la conduite.</div>
+            </div>
+            <div class="hero-orbit" aria-hidden="true">
+              <div class="orbit-ring r1"></div><div class="orbit-ring r2"></div><div class="orbit-ring r3"></div>
+              <div class="orbit-core"><span id="heroMinutes">20</span><small>min</small></div>
+              <span class="orbit-tag t1">Écoute</span><span class="orbit-tag t2">Révision</span><span class="orbit-tag t3">Oral</span>
+            </div>
+          </article>
+
+          <article class="today-card">
+            <div class="card-head"><div><p class="kicker">AUJOURD'HUI</p><h3 id="todayLesson">Leçon 1</h3></div><span class="status-pill" id="todayStage">Étape 1</span></div>
+            <p class="muted" id="todayDescription"></p>
+            <div class="daily-progress">
+              <div class="daily-ring" id="dailyRing"><strong id="dailyPct">0%</strong><span>objectif</span></div>
+              <div class="daily-meta"><div><strong id="dailyMinutes">0 min</strong><span>sur <b id="dailyGoal">20</b> min</span></div><div><strong id="reviewCount">0</strong><span>à revoir</span></div></div>
+            </div>
+            <button class="text-btn" data-route="progress">Voir ma progression →</button>
+          </article>
+        </div>
+
+        <div class="section-title-row"><div><p class="kicker">CHOISIS TON RYTHME</p><h2>Un mode pour chaque trajet</h2></div><button class="text-btn" data-route="learn">Tout voir →</button></div>
+        <div class="mode-grid" id="homeModes"></div>
+
+        <div class="stats-strip">
+          <div><span>Leçons</span><strong id="homeLessons">0 / 35</strong></div>
+          <div><span>Expressions solides</span><strong id="homeSolid">0</strong></div>
+          <div><span>Temps total</span><strong id="homeHours">0 h</strong></div>
+          <div><span>Série</span><strong id="homeStreak">0 j</strong></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-learn" data-view="learn">
+        <div class="section-title-row"><div><p class="kicker">SESSION ORALE</p><h2>Choisis ton trajet</h2></div><span class="live-badge"><i></i> moteur adaptatif</span></div>
+        <div class="duration-picker" id="durationPicker">
+          <button data-min="10">10 <span>min</span></button>
+          <button class="active" data-min="20">20 <span>min</span></button>
+          <button data-min="30">30 <span>min</span></button>
+          <button data-min="45">45 <span>min</span></button>
+          <button data-min="60">60 <span>min</span></button>
+        </div>
+        <div class="mode-grid large" id="learnModes"></div>
+        <article class="info-card accent">
+          <div class="icon-disc">◌</div>
+          <div><h3>Le mode oral ne te punit plus quand le téléphone comprend mal.</h3><p>Quand la reconnaissance n'est pas fiable, l'app bascule sur l'écho de ta voix et une auto-évaluation simple. Ta progression ne baisse pas à cause d'une erreur technique.</p></div>
+          <button class="secondary" data-route="voice">Configurer</button>
+        </article>
+      </section>
+
+      <section class="view" id="view-courses" data-view="courses">
+        <div class="section-title-row"><div><p class="kicker">PARCOURS</p><h2 id="courseHeadline">35 leçons, une progression claire</h2></div><div class="search-wrap"><input id="courseSearch" type="search" placeholder="Chercher une leçon"><span>⌕</span></div></div>
+        <div class="course-summary" id="courseSummary"></div>
+        <div id="courseList" class="course-list"></div>
+      </section>
+
+      <section class="view" id="view-practice" data-view="practice">
+        <div class="section-title-row"><div><p class="kicker">ENTRAÎNEMENT</p><h2>Travaille exactement ce qu'il te faut</h2></div></div>
+        <div class="practice-grid">
+          <button class="practice-card" data-mode="review"><span class="pc-icon">↺</span><div><b>Révisions intelligentes</b><small>Ce qui arrive à échéance aujourd'hui.</small></div><strong id="practiceDue">0</strong></button>
+          <button class="practice-card" data-mode="numbers"><span class="pc-icon">123</span><div><b>Chiffres au hasard</b><small>Réponse rapide, ordre aléatoire.</small></div><em>5 min</em></button>
+          <button class="practice-card" data-mode="sprint"><span class="pc-icon">⚡</span><div><b>Sprint oral</b><small>Réponds en luxembourgeois sans lire.</small></div><em>5 min</em></button>
+          <button class="practice-card" data-mode="listen"><span class="pc-icon">♫</span><div><b>Écoute libre</b><small>Pour les jours de fatigue. Aucun test.</small></div><em>libre</em></button>
+          <button class="practice-card premium-card" data-premium-feature="dialogues"><span class="pc-icon">◫</span><div><b>Dialogues immersifs</b><small>Conversations à deux voix.</small></div><em>PREMIUM</em></button>
+          <button class="practice-card premium-card" data-premium-feature="mistakes"><span class="pc-icon">◎</span><div><b>Mes erreurs</b><small>Reprend tes fragilités les plus fréquentes.</small></div><em>PREMIUM</em></button>
+        </div>
+        <div class="section-title-row compact"><div><p class="kicker">LEXIQUE</p><h2>Retrouve une expression</h2></div></div>
+        <div class="lex-toolbar">
+          <div class="search-wrap grow"><input id="lexSearch" type="search" placeholder="Luxembourgeois ou français"><span>⌕</span></div>
+          <div class="filter-chips" id="lexFilters"><button class="active" data-filter="all">Tout</button><button data-filter="due">À revoir</button><button data-filter="solid">Solides</button><button data-filter="fav">Favoris</button></div>
+        </div>
+        <div id="lexList" class="lex-list"></div>
+      </section>
+
+      <section class="view" id="view-progress" data-view="progress">
+        <div class="section-title-row"><div><p class="kicker">PROGRESSION</p><h2>Tu vois ce qui avance vraiment</h2></div><button class="secondary" id="exportProgressBtn">Exporter</button></div>
+        <div class="metric-grid">
+          <article><span>Temps total</span><strong id="metricHours">0 h</strong><small id="metricSessions">0 séance</small></article>
+          <article><span>Leçons validées</span><strong id="metricLessons">0</strong><small>sur 35</small></article>
+          <article><span>Expressions solides</span><strong id="metricSolid">0</strong><small id="metricSolidSub">sur 255</small></article>
+          <article><span>Série actuelle</span><strong id="metricStreak">0 j</strong><small id="metricLast">Aucune séance</small></article>
+        </div>
+        <article class="chart-card"><div class="card-head"><div><p class="kicker">14 DERNIERS JOURS</p><h3>Minutes travaillées</h3></div><span class="status-pill" id="chartTotal">0 min</span></div><div class="chart" id="progressChart"></div></article>
+        <div class="split-grid">
+          <article class="panel"><div class="card-head"><div><p class="kicker">MAÎTRISE</p><h3>Répartition des expressions</h3></div></div><div id="masteryBars" class="mastery-bars"></div></article>
+          <article class="panel"><div class="card-head"><div><p class="kicker">PROCHAINE ÉTAPE</p><h3 id="nextStageTitle">Continuer</h3></div></div><p class="muted" id="nextStageText"></p><button class="primary" data-route="learn">Continuer maintenant</button></article>
+        </div>
+        <article class="panel"><div class="card-head"><div><p class="kicker">SAUVEGARDE</p><h3>Garde ta progression</h3></div></div><p class="muted">En mode local, tes données restent sur cet appareil. Avec un compte Premium connecté, la synchronisation cloud peut être activée.</p><div class="row-actions"><button class="secondary" id="importProgressBtn">Importer</button><input type="file" id="importProgressFile" accept="application/json" hidden><button class="danger-ghost" id="resetProgressBtn">Remise à zéro</button></div></article>
+      </section>
+
+      <section class="view" id="view-voice" data-view="voice">
+        <div class="voice-hero">
+          <div><p class="kicker">VOIX ET MICRO</p><h2>On règle d'abord ce qui t'empêchait de parler.</h2><p>Le navigateur reste un secours. La version commerciale est prête à utiliser un moteur cloud en luxembourgeois <b>lb-LU</b> quand il est configuré.</p></div>
+          <div class="mic-visual" id="micVisual"><div class="mic-dot"></div><div class="wave" id="micWave"></div></div>
+        </div>
+        <div class="voice-grid">
+          <article class="panel voice-panel">
+            <div class="card-head"><div><p class="kicker">TEST RAPIDE</p><h3>Dis « Moien »</h3></div><span class="status-pill" id="speechEngineBadge">non testé</span></div>
+            <p class="muted">L'app teste d'abord le moteur cloud s'il est configuré, puis la reconnaissance du navigateur. Si aucun moteur n'est fiable, elle te le dit clairement.</p>
+            <button class="primary big full" id="voiceTestBtn">Tester maintenant</button>
+            <div class="voice-result" id="voiceTestResult">Aucun test lancé.</div>
+          </article>
+          <article class="panel">
+            <div class="card-head"><div><p class="kicker">DIAGNOSTIC</p><h3>État technique</h3></div><button class="text-btn" id="copyDiagBtn">Copier</button></div>
+            <div id="diagnosticList" class="diag-list"></div>
+            <button class="secondary full" id="fullDiagnosticBtn">Lancer le diagnostic complet</button>
+          </article>
+        </div>
+        <div class="settings-grid">
+          <article class="panel"><p class="kicker">RECONNAISSANCE</p><h3>Priorité de correction</h3><div class="segmented" id="recognitionMode"><button data-value="auto" class="active">Auto</button><button data-value="cloud">Cloud</button><button data-value="browser">Navigateur</button><button data-value="echo">Écho</button></div><p class="microcopy">Auto choisit le meilleur moteur disponible et n'abaisse jamais le niveau sur un résultat incertain.</p></article>
+          <article class="panel"><p class="kicker">TEMPS DE RÉPONSE</p><h3><span id="answerSeconds">6</span> secondes</h3><input type="range" id="answerTime" min="3" max="12" value="6" step="1"><p class="microcopy">Augmente ce temps au début. Il se réduit ensuite automatiquement sur les expressions solides.</p></article>
+          <article class="panel"><p class="kicker">VOIX DU COURS</p><h3>Prononciation</h3><select id="luxVoiceSelect"></select><button class="secondary full" id="voicePreviewBtn">Écouter un exemple</button></article>
+          <article class="panel"><p class="kicker">VOIX DU PROFESSEUR</p><h3>Français</h3><select id="frVoiceSelect"></select><label class="range-label">Vitesse <span id="voiceRateLabel">0,85×</span></label><input type="range" id="voiceRate" min="0.55" max="1.15" value="0.85" step="0.05"></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-premium" data-view="premium">
+        <div class="premium-hero">
+          <span class="premium-star">✦</span>
+          <p class="kicker">LËTZEBUERGESCH PREMIUM</p>
+          <h2>Le trajet devient un vrai programme d'apprentissage.</h2>
+          <p>Compte, synchronisation, reconnaissance cloud en luxembourgeois, parcours complet, dialogues, statistiques avancées et hors ligne renforcé.</p>
+          <div class="billing-toggle" id="billingToggle"><button class="active" data-cycle="year">Annuel <span>économise 37%</span></button><button data-cycle="month">Mensuel</button></div>
+        </div>
+        <div class="pricing-grid">
+          <article class="price-card free"><p class="kicker">DÉCOUVERTE</p><h3>Gratuit</h3><div class="price"><strong>0 €</strong></div><ul><li>Premières leçons</li><li>Sessions courtes</li><li>Progression locale</li><li>Reconnaissance navigateur si disponible</li></ul><button class="secondary full" id="stayFreeBtn">Continuer gratuitement</button></article>
+          <article class="price-card premium featured"><span class="recommended">RECOMMANDÉ</span><p class="kicker">PREMIUM</p><h3>Tout débloquer</h3><div class="price" id="premiumPrice"><strong>59,99 €</strong><span>/ an</span></div><div class="equiv" id="premiumEquiv">soit 5,00 € / mois</div><ul><li>Parcours complet</li><li>Sessions trajets illimitées</li><li>Reconnaissance cloud lb-LU</li><li>Dialogues et révisions intelligentes</li><li>Synchronisation multi-appareils</li><li>Statistiques avancées</li><li>Accès hors ligne aux contenus téléchargés</li><li>Nouveaux cours inclus</li></ul><button class="primary big full" id="subscribeBtn">Choisir Premium</button><small class="fineprint">Prix de démonstration à valider avant commercialisation. Paiement réel seulement après configuration Stripe.</small></article>
+        </div>
+        <article class="trust-strip"><div><strong>Résiliation simple</strong><span>via le portail de facturation</span></div><div><strong>Paiement sécurisé</strong><span>géré par Stripe</span></div><div><strong>Données séparées</strong><span>progression protégée par compte</span></div></article>
+      </section>
+
+      <section class="view" id="view-account" data-view="account">
+        <div class="account-grid">
+          <article class="profile-card">
+            <div class="profile-avatar" id="profileAvatar">F</div>
+            <div><p class="kicker">MON PROFIL</p><h2 id="profileName">Apprenant</h2><p class="muted" id="profileEmail">Mode local</p></div>
+            <span class="status-pill" id="accountPlan">Découverte</span>
+          </article>
+          <article class="panel" id="authPanel">
+            <div class="card-head"><div><p class="kicker">COMPTE CLOUD</p><h3>Connexion</h3></div></div>
+            <p class="muted" id="authStatus">Le mode local fonctionne sans compte. Configure Supabase pour activer les comptes et la synchronisation.</p>
+            <div class="form-grid"><label>Email<input id="authEmail" type="email" autocomplete="email" placeholder="ton@email.com"></label><label>Mot de passe<input id="authPassword" type="password" autocomplete="current-password" placeholder="8 caractères minimum"></label></div>
+            <div class="row-actions"><button class="primary" id="signInBtn">Se connecter</button><button class="secondary" id="signUpBtn">Créer un compte</button><button class="ghost" id="signOutBtn" hidden>Se déconnecter</button></div>
+          </article>
+          <article class="panel"><div class="card-head"><div><p class="kicker">ABONNEMENT</p><h3 id="billingPlanTitle">Découverte</h3></div><span class="status-pill" id="billingStatus">local</span></div><p class="muted" id="billingPlanText">Aucun abonnement actif.</p><div class="row-actions"><button class="primary" data-route="premium">Voir Premium</button><button class="secondary" id="billingPortalBtn" hidden>Gérer mon abonnement</button></div></article>
+          <article class="panel"><div class="card-head"><div><p class="kicker">PRÉFÉRENCES</p><h3>Apprentissage</h3></div></div><label class="setting-line"><span><b>Objectif quotidien</b><small>Minutes prévues par jour</small></span><select id="dailyGoalSelect"><option>10</option><option selected>20</option><option>30</option><option>45</option><option>60</option></select></label><label class="setting-line"><span><b>Astuces mémoire</b><small>Afficher les moyens mnémotechniques</small></span><input type="checkbox" id="memoryTipsToggle" checked></label><label class="setting-line"><span><b>Écho de ma voix</b><small>Réécouter ma propre prononciation</small></span><input type="checkbox" id="echoToggle" checked></label></article>
+          <article class="panel"><div class="card-head"><div><p class="kicker">APPLICATION</p><h3>Installation et mise à jour</h3></div></div><div class="row-actions"><button class="secondary" id="installBtnAccount">Installer</button><button class="secondary" id="updateBtn">Chercher une mise à jour</button></div><p class="microcopy" id="installHelp"></p></article>
+          <article class="panel legal-panel"><div class="card-head"><div><p class="kicker">LÉGAL</p><h3>Avant commercialisation</h3></div></div><p class="muted">Les pages juridiques fournies sont des modèles de travail. Elles doivent être complétées avec l'identité réelle de l'entreprise et validées avant mise en vente.</p><div class="legal-links"><a href="legal.html">Mentions légales</a><a href="privacy.html">Confidentialité</a><a href="terms.html">Conditions d'abonnement</a></div></article>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Navigation mobile">
+      <button class="active" data-route="home"><span>⌂</span><small>Accueil</small></button>
+      <button data-route="learn"><span>▶</span><small>Trajet</small></button>
+      <button data-route="courses"><span>▦</span><small>Cours</small></button>
+      <button data-route="progress"><span>↗</span><small>Progrès</small></button>
+      <button data-route="account"><span>◎</span><small>Compte</small></button>
+    </nav>
   </div>
-  <div style="text-align:right"><div class="cpt" id="cpt"></div><div class="net" id="netStatus">Connexion</div></div>
- </header>
 
- <div class="alerte" id="alerteMic"></div>
-
- <div class="securite"><b>Sécurité.</b> Lance la séance avant de démarrer. Pendant le trajet, ne manipule pas l'écran.</div>
- <div class="avis">
-  <b>Contenu.</b> Les mots et expressions restent à vérifier sur <a href="https://lod.lu" target="_blank" rel="noopener">lod.lu</a> avant une utilisation professionnelle.<br>
-  <b>Voix.</b> L'application utilise une voix Lëtzebuergesch si le téléphone en fournit une. Sinon elle utilise une voix allemande comme approximation.
- </div>
-
- <nav class="ong" role="tablist">
-  <button class="tab" role="tab" aria-selected="true" data-v="trajet">Trajet</button>
-  <button class="tab" role="tab" aria-selected="false" data-v="suivi">Suivi</button>
-  <button class="tab" role="tab" aria-selected="false" data-v="cours">Leçons</button>
-  <button class="tab" role="tab" aria-selected="false" data-v="dial">Dialogues</button>
-  <button class="tab" role="tab" aria-selected="false" data-v="lex">Lexique</button>
-  <button class="tab" role="tab" aria-selected="false" data-v="voix">Voix et micro</button>
-  <button class="tab" role="tab" aria-selected="false" data-v="methode">Méthode</button>
-  <button class="tab" role="tab" aria-selected="false" data-v="install">Installer</button>
- </nav>
-
- <section class="vue on" id="v-trajet">
-  <div class="carte">
-   <div class="t">Séance du jour</div>
-   <div class="g" id="procheT"></div>
-   <div class="s" id="procheS"></div>
-  </div>
-  <div class="obj"><div><div class="t">Objectif aujourd'hui</div><div class="s" id="objTxt">0 min aujourd'hui</div></div><div class="val" id="objVal">0%</div><div class="mini"><span id="objBar"></span></div></div>
-  <div class="dur" id="dur">
-   <button class="d" data-m="10" aria-pressed="false"><strong>10</strong><span>min</span></button>
-   <button class="d" data-m="20" aria-pressed="true"><strong>20</strong><span>min</span></button>
-   <button class="d" data-m="40" aria-pressed="false"><strong>40</strong><span>min</span></button>
-   <button class="d" data-m="60" aria-pressed="false"><strong>60</strong><span>min</span></button>
-  </div>
-  <button class="go" id="go">Démarrer · aller</button>
-  <div class="duo" style="margin-top:8px">
-   <button class="sec" id="rev" style="margin:0">Retour · consolidation</button>
-   <button class="sec" id="jeu" style="margin:0">Jeu · 5 minutes</button>
-  </div>
-  <div class="duo" style="margin-bottom:0">
-   <button class="sec" id="nbr" style="margin:0">Chiffres au hasard</button>
-   <button class="sec" id="libre" style="margin:0">Écoute libre</button>
-  </div>
-  <div class="note">Une fois lancée, la séance va jusqu'au bout toute seule.</div>
-  <button class="sec" id="btnInstall" style="display:none;border-color:var(--or);color:var(--or)">Installer l'application</button>
-  <div class="h">Les 100 heures</div>
-  <div class="bar"><div class="barin" id="barH"></div></div>
-  <div class="barlbl"><span>0 h</span><span id="lblH"></span></div>
-  <div class="p" style="margin-top:12px" id="resH"></div>
- </section>
-
- <section class="vue" id="v-suivi">
-  <div class="h">Où tu en es</div>
-  <div class="duo">
-   <div class="carte" style="margin:0"><div class="t">Leçons validées</div><div class="g" id="sv1"></div></div>
-   <div class="carte" style="margin:0"><div class="t">Mots solides</div><div class="g" id="sv2"></div></div>
-  </div>
-  <div class="duo">
-   <div class="carte" style="margin:0"><div class="t">À revoir aujourd'hui</div><div class="g" id="sv4"></div></div>
-   <div class="carte" style="margin:0"><div class="t">Jours de suite</div><div class="g" id="sv5"></div></div>
-  </div>
-  <div class="carte"><div class="t">Temps de travail</div><div class="g" id="sv3"></div><div class="s" id="sv3s"></div></div>
-  <div class="h">Quatorze derniers jours</div>
-  <div class="graph" id="graph"></div>
-  <div class="barlbl"><span>il y a 14 jours</span><span>aujourd'hui</span></div>
-  <div class="h">Détail par leçon</div>
-  <div id="suiviListe"></div>
-  <div class="h">Le plan des 100 heures</div>
-  <div id="blocs"></div>
-  <div class="h">Sauvegarde</div>
-  <div class="p">La progression vit sur cet appareil. Exporte-la de temps en temps, ou pour la transférer sur un autre téléphone.</div>
-  <button class="sec" id="btnExport">Exporter ma progression</button>
-  <button class="sec" id="btnImport">Importer une sauvegarde</button>
-  <input type="file" id="fileImport" accept="application/json" style="display:none">
- </section>
-
- <section class="vue" id="v-cours"><div id="lecons"></div><div id="detail" style="display:none"></div></section>
-
- <section class="vue" id="v-dial">
-  <div class="p">Des conversations complètes, construites uniquement avec ce que tu as déjà appris. Écoute d'abord sans lire. Le bouton lance les deux voix.</div>
-  <div id="dialogues"></div>
- </section>
-
- <section class="vue" id="v-lex">
-  <div class="p">À consulter à l'arrêt. Le bouton lod.lu ouvre l'entrée officielle avec l'audio natif.</div>
-  <input class="rch" id="rch" type="search" placeholder="Chercher en luxembourgeois ou en français" aria-label="Chercher">
-  <div class="filtres" id="lexFiltres">
-   <button class="filtre" data-filtre="tous" aria-pressed="true">Tout</button>
-   <button class="filtre" data-filtre="revoir" aria-pressed="false">À revoir</button>
-   <button class="filtre" data-filtre="solides" aria-pressed="false">Solides</button>
-   <button class="filtre" data-filtre="favoris" aria-pressed="false">Favoris</button>
-  </div>
-  <div id="lexique"></div>
- </section>
-
- <section class="vue" id="v-voix">
-  <div class="h">Diagnostic</div>
-  <div class="p">Lance ce test une fois, à l'arrêt. Il te dira précisément ce qui marche et ce qui bloque.</div>
-  <button class="sec" id="btnDiag" style="margin-top:0">Lancer le diagnostic complet</button>
-  <div class="rowbtn"><button class="sec" id="btnCopyDiag">Copier le diagnostic</button><button class="sec" id="btnUpdate">Chercher une mise à jour</button></div>
-  <div class="tech" id="diag">Test non lancé.</div>
-
-  <div class="h">Correction quand tu répètes</div>
-  <div class="opt">
-   <div><div class="opt-t">Reconnaissance vocale</div><div class="opt-d">Fonction expérimentale. Une erreur de reconnaissance ne fait plus baisser ta progression.</div></div>
-   <button class="sw" id="swCor" aria-pressed="false" aria-label="Reconnaissance vocale"></button>
-  </div>
-  <div class="opt">
-   <div><div class="opt-t">Écho de ta voix</div><div class="opt-d">Il enregistre ta répétition et te la rejoue juste avant le modèle. Tu t'entends, puis tu entends la bonne version. Fonctionne hors ligne.</div></div>
-   <button class="sw" id="swEcho" aria-pressed="true" aria-label="Écho de ta voix"></button>
-  </div>
-  <div class="opt">
-   <div><div class="opt-t">Priorité compréhension</div><div class="opt-d">Plus d'exercices d'écoute, moins de production.</div></div>
-   <button class="sw" id="swComp" aria-pressed="true" aria-label="Priorité compréhension"></button>
-  </div>
-  <div class="opt">
-   <div><div class="opt-t">Astuces de mémoire</div><div class="opt-d">Un crochet mental à la première rencontre d'un mot. Ce ne sont pas des règles de langue.</div></div>
-   <button class="sw" id="swTruc" aria-pressed="true" aria-label="Astuces de mémoire"></button>
+  <div class="modal-backdrop" id="lessonModal" hidden>
+    <div class="modal-sheet lesson-sheet" role="dialog" aria-modal="true" aria-labelledby="lessonModalTitle">
+      <button class="modal-close" data-close-modal="lessonModal">×</button>
+      <div id="lessonModalBody"></div>
+    </div>
   </div>
 
-  <div class="h">Réglages de la voix</div>
-  <div class="champ"><label for="selDe">Voix pour le luxembourgeois</label>
-   <div class="opt-d">Une voix Lëtzebuergesch est prioritaire. Sinon l’application utilise une voix allemande comme approximation.</div><select id="selDe"></select></div>
-  <div class="champ"><label for="selFr">Voix du professeur, en français</label><select id="selFr"></select></div>
-  <div class="champ"><label for="rgVit">Vitesse · <span id="vVit"></span></label><input type="range" id="rgVit" min="0.35" max="1.2" step="0.05"></div>
-  <div class="champ"><label for="rgInt">Intonation · <span id="vInt"></span></label>
-   <div class="opt-d">Grave à gauche, aigu à droite.</div><input type="range" id="rgInt" min="0.5" max="1.6" step="0.05"></div>
-  <div class="champ"><label for="rgTps">Temps pour répondre · <span id="vTps"></span></label><input type="range" id="rgTps" min="2500" max="10000" step="500"></div>
-  <button class="sec" id="btnTestVoix">Écouter un exemple</button>
-  <div class="h">Objectif quotidien</div>
-  <div class="champ"><label for="rgObj">Minutes par jour · <span id="vObj"></span></label><input type="range" id="rgObj" min="5" max="60" step="5"></div>
-  <div class="h">Remise à zéro</div>
-  <button class="sec" id="raz">Effacer toute la progression</button>
- </section>
-
- <section class="vue" id="v-methode">
-  <div class="h">Comment ce cours est construit</div>
-  <div class="p">Quinze principes issus de ce qu'on sait du fonctionnement de la mémoire. Tu n'as rien à faire pour les appliquer, ils sont dans le moteur.</div>
-  <div class="etape"><b>1</b><div><b>Récupération active.</b> On te demande avant de te donner. Chercher en mémoire fixe mieux que relire.</div></div>
-  <div class="etape"><b>2</b><div><b>Espacement croissant.</b> Un mot revient après 1, 2, 4, 8, 16, 32 jours. L'intervalle s'allonge à chaque réussite et s'effondre à chaque échec.</div></div>
-  <div class="etape"><b>3</b><div><b>Reprise du lendemain.</b> Ce que tu as vu hier repasse en priorité. C'est pendant la nuit que la trace se fixe.</div></div>
-  <div class="etape"><b>4</b><div><b>Entrelacement.</b> Les mots de plusieurs leçons sont mélangés. Plus dur sur le moment, meilleur à long terme.</div></div>
-  <div class="etape"><b>5</b><div><b>Difficulté désirable.</b> Le silence avant la réponse s'allonge quand le mot devient facile.</div></div>
-  <div class="etape"><b>6</b><div><b>Charge limitée.</b> Quatre nouveaux mots à la fois, sept par séance au maximum.</div></div>
-  <div class="etape"><b>7</b><div><b>Boucle phonologique.</b> Entendre, dire à voix haute, réentendre. Dire grave deux fois mieux que penser.</div></div>
-  <div class="etape"><b>8</b><div><b>Crochets mnémoniques.</b> Une image ou un rapprochement sonore à la première rencontre.</div></div>
-  <div class="etape"><b>9</b><div><b>Contraste minimal.</b> Deux mots proches présentés côte à côte. L'oreille apprend par différence.</div></div>
-  <div class="etape"><b>10</b><div><b>Construction par la fin.</b> Les phrases longues se montent en partant de la fin, ce qu'on oublie en premier.</div></div>
-  <div class="etape"><b>11</b><div><b>Primauté et récence.</b> Les mots fragiles au début et à la fin de séance.</div></div>
-  <div class="etape"><b>12</b><div><b>Pauses de consolidation.</b> Dix secondes de silence toutes les cinq minutes. Le cerveau rejoue ce qu'il vient d'apprendre.</div></div>
-  <div class="etape"><b>13</b><div><b>Feedback immédiat.</b> La correction arrive dans la seconde.</div></div>
-  <div class="etape"><b>14</b><div><b>Erreur avant réponse.</b> On te fait tenter même quand tu ne sais pas.</div></div>
-  <div class="etape"><b>15</b><div><b>Régularité plutôt qu'intensité.</b> Vingt minutes tous les jours battent trois heures le dimanche.</div></div>
-  <div class="h">Les cinq modes</div>
-  <div class="p"><b>Aller.</b> Nouveaux mots et rappels. C'est la séance principale.<br><br>
-   <b>Retour.</b> Consolidation de ce que tu as vu le matin. Aucun mot nouveau.<br><br>
-   <b>Jeu.</b> Cinq minutes de série rapide, score annoncé à la fin.<br><br>
-   <b>Chiffres au hasard.</b> Entraînement pur sur les nombres que tu as déjà vus, sans limite.<br><br>
-   <b>Écoute libre.</b> Aucun effort demandé. Le cours défile, tu écoutes. Pour les jours de fatigue, ou dans le trafic dense.</div>
- </section>
-
- <section class="vue" id="v-install">
-  <div class="h">Installer sur le téléphone</div>
-  <div class="install-card"><div class="install-state" id="installState">Vérification…</div><div class="install-help" id="installHelp"></div></div>
-  <button class="go" id="btnInstall2">Installer l'application</button>
-  <button class="sec" id="btnUpdate2">Vérifier les mises à jour</button>
-  <div class="h2">Android, Chrome</div>
-  <div class="etape"><b>1</b><div>Ouvre l'adresse de la page.</div></div>
-  <div class="etape"><b>2</b><div>Menu à trois points, puis Installer l'application, ou Ajouter à l'écran d'accueil.</div></div>
-  <div class="etape"><b>3</b><div>Lance-la depuis l'icône. Autorise le micro à la première séance.</div></div>
-  <div class="h2">iPhone, Safari</div>
-  <div class="etape"><b>1</b><div>Ouvre l'adresse dans Safari, pas dans une autre application.</div></div>
-  <div class="etape"><b>2</b><div>Bouton Partager, puis Sur l'écran d'accueil.</div></div>
-  <div class="etape"><b>3</b><div>Lance-la depuis l'icône. Autorise le micro.</div></div>
-  <div class="h2">Le micro</div>
-  <div class="p">Le micro fonctionne normalement sur une adresse HTTPS et sur localhost. Les autorisations du navigateur et du téléphone peuvent aussi le bloquer. Le diagnostic indique le point précis à vérifier.</div>
-  <div class="h2">La voix hors ligne</div>
-  <div class="p"><b>Android</b> : Réglages, Système, Langues, Synthèse vocale, installer l'allemand et le français.<br><br><b>iPhone</b> : Réglages, Accessibilité, Contenu énoncé, Voix, télécharger une voix allemande et une française.</div>
- </section>
-</div>
-
-<div class="cd" id="cd" aria-live="polite">
- <div class="bn" id="bn"></div>
- <div class="cdh"><span id="etat">Séance</span><button class="qt" id="qt">Terminer</button></div>
- <div class="pist"><span id="pist"></span></div>
- <div class="pistl"><span id="lblB"></span><span id="lblT"></span></div>
- <div class="ph" id="ph">Prêt</div>
- <div class="scn">
-  <div class="cs" id="cs"></div>
-  <div class="lb" id="lb"></div>
-  <div class="phx" id="phx"></div>
-  <div class="fr" id="fr"></div>
-  <div class="micro" id="micro"><span class="pt"></span><span>Je t'écoute</span></div>
-  <div class="ent" id="ent"></div>
-  <div class="an" id="an"><svg width="70" height="70"><circle class="pi" cx="35" cy="35" r="31"></circle><circle class="av" id="anav" cx="35" cy="35" r="31"></circle></svg></div>
- </div>
- <div class="cmd">
-  <button class="c" id="bRef">Refaire</button>
-  <button class="c pr" id="bPau">Pause</button>
-  <button class="c" id="bSui">Suivant</button>
- </div>
-</div>
-
-<div class="qz" id="qz">
- <div class="qz-h"><span id="qzTitre"></span><button class="qt" id="qzQuit">Fermer</button></div>
- <div id="qzCorps"></div>
-</div>
-
-<div class="sum" id="sum" role="dialog" aria-modal="true" aria-labelledby="sumTitre">
- <div class="sum-card">
-  <div class="t">Bilan de séance</div><div class="h" id="sumTitre">Séance terminée</div>
-  <div class="sum-grid">
-   <div class="carte"><div class="t">Temps</div><div class="g" id="sumMin">0 min</div></div>
-   <div class="carte"><div class="t">Score vocal</div><div class="g" id="sumScore">—</div></div>
-   <div class="carte"><div class="t">Expressions solides</div><div class="g" id="sumSolides">0</div></div>
-   <div class="carte"><div class="t">À revoir</div><div class="g" id="sumDue">0</div></div>
+  <div class="session-overlay" id="sessionOverlay" hidden>
+    <div class="session-top"><button class="session-exit" id="sessionExitBtn">Quitter</button><div><span id="sessionModeLabel">Séance</span><strong id="sessionCounter">1 / 10</strong></div><button class="session-pause" id="sessionPauseBtn">Pause</button></div>
+    <div class="session-progress"><span id="sessionProgressBar"></span></div>
+    <div class="session-stage">
+      <div class="session-orb" id="sessionOrb"><span class="orb-mic">◌</span><div class="orb-pulse"></div></div>
+      <p class="session-phase" id="sessionPhase">Écoute</p>
+      <h2 id="sessionPrompt">Moien</h2>
+      <p class="sessionPhonetic" id="sessionPhonetic"></p>
+      <p class="sessionTranslation" id="sessionTranslation"></p>
+      <div class="heard" id="sessionHeard" hidden></div>
+      <div class="session-feedback" id="sessionFeedback" hidden>
+        <button data-self="hard">À retravailler</button><button data-self="ok">Je l'ai dit</button><button data-self="easy">Facile</button>
+      </div>
+    </div>
+    <div class="session-bottom"><button id="sessionRepeatBtn">↺ Répéter</button><button id="sessionSkipBtn">Suivant →</button></div>
   </div>
-  <div class="p" id="sumMsg"></div>
-  <button class="go" id="sumClose">Continuer</button>
- </div>
-</div>
-<div class="toast" id="toast"><div id="toastTxt"></div><div class="toast-actions" id="toastActions"></div></div>
-<script src="cours.js?v=2.0.0"></script>
-<script src="app.js?v=2.0.0"></script>
+
+  <div class="modal-backdrop" id="checkoutModal" hidden>
+    <div class="modal-sheet small-sheet" role="dialog" aria-modal="true">
+      <button class="modal-close" data-close-modal="checkoutModal">×</button>
+      <span class="premium-star">✦</span><h2 id="checkoutTitle">Premium</h2><p id="checkoutText" class="muted"></p><button class="primary big full" id="checkoutContinueBtn">Continuer</button>
+    </div>
+  </div>
+
+  <script src="config.js?v=4.0.0"></script>
+  <script src="cours.js?v=4.0.0"></script>
+  <script src="app.js?v=4.0.0"></script>
 </body>
 </html>
