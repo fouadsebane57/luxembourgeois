@@ -1,7 +1,6 @@
 /*
   CONFIGURATION PUBLIQUE
-  Ne jamais mettre de clé Stripe secrète, Google privée
-  ou Supabase sb_secret_ dans ce fichier.
+  Ne jamais mettre de cle secrete dans ce fichier.
 */
 window.LETZ_CONFIG = {
   appVersion: "4.0.0",
@@ -26,5 +25,5 @@ window.LETZ_CONFIG = {
   },
 
   supportEmail: "",
-  legalBusinessName: "À COMPLÉTER"
+  legalBusinessName: "A COMPLETER"
 };
