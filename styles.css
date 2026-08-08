@@ -10,3 +10,84 @@ button,input,select{font:inherit}button{cursor:pointer}a{color:inherit}.app-shel
 @media(max-width:1100px){.sidebar{width:220px}.main{margin-left:220px;padding:0 24px 50px}.offline-bar{left:220px}.hero-card{grid-template-columns:1fr;padding:32px}.hero-orbit{display:none}.settings-grid{grid-template-columns:repeat(2,1fr)}.mode-grid{grid-template-columns:repeat(2,1fr)}.mode-grid.large{grid-template-columns:repeat(2,1fr)}.hero-copy h2{font-size:38px}.voice-hero{grid-template-columns:1fr 220px}.metric-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){body{padding-bottom:76px}.sidebar{display:none}.main{margin-left:0;padding:0 14px 30px}.topbar{height:92px;padding-top:max(8px,env(safe-area-inset-top))}.topbar h1{font-size:19px}.eyebrow{font-size:9px}.offline-bar{left:0}.bottom-nav{display:grid;position:fixed;left:0;right:0;bottom:0;height:72px;padding-bottom:env(safe-area-inset-bottom);grid-template-columns:repeat(5,1fr);background:rgba(6,16,27,.94);backdrop-filter:blur(20px);border-top:1px solid var(--line);z-index:70}.bottom-nav button{border:0;background:transparent;color:#71879a;display:grid;place-items:center;align-content:center;gap:2px}.bottom-nav button span{font-size:18px}.bottom-nav button small{font-size:9px}.bottom-nav button.active{color:var(--green)}.hero-grid{grid-template-columns:1fr}.hero-card{min-height:auto;padding:25px;border-radius:22px}.hero-copy h2,.premium-hero h2,.voice-hero h2{font-size:32px}.hero-copy>p:not(.kicker){font-size:13px}.hero-actions{display:grid}.today-card{padding:22px}.daily-progress{grid-template-columns:110px 1fr}.daily-ring{width:106px;height:106px}.mode-grid,.mode-grid.large{grid-template-columns:1fr 1fr;gap:9px}.mode-card{min-height:145px;padding:17px}.mode-card h3{font-size:14px;margin-top:15px}.mode-card p{font-size:10px}.stats-strip{grid-template-columns:1fr 1fr}.stats-strip div:nth-child(2){border-right:0}.stats-strip div:nth-child(-n+2){border-bottom:1px solid var(--line)}.section-title-row{margin-top:28px}.section-title-row h2{font-size:22px}.duration-picker{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}.duration-picker button{min-width:0;padding:10px 5px}.info-card{grid-template-columns:auto 1fr}.info-card button{grid-column:1/-1}.search-wrap{min-width:0;width:100%}.section-title-row:has(.search-wrap){align-items:stretch;flex-direction:column}.course-summary{grid-template-columns:1fr 1fr}.course-summary article:last-child{grid-column:1/-1}.practice-grid{grid-template-columns:1fr}.lex-toolbar{display:grid}.metric-grid{grid-template-columns:1fr 1fr}.chart{height:170px;gap:5px}.split-grid,.voice-grid,.settings-grid,.pricing-grid,.account-grid{grid-template-columns:1fr}.voice-hero{grid-template-columns:1fr;padding:24px}.mic-visual{height:120px}.pricing-grid{margin-top:10px}.trust-strip{grid-template-columns:1fr}.trust-strip div{border-right:0;border-bottom:1px solid var(--line)}.trust-strip div:last-child{border-bottom:0}.profile-card{display:grid;grid-template-columns:auto 1fr}.profile-card .status-pill{grid-column:1/-1;margin-left:0;width:max-content}.form-grid{grid-template-columns:1fr}.session-stage h2{font-size:38px}.sessionTranslation{font-size:17px}.session-feedback{display:grid;grid-template-columns:repeat(3,1fr);width:100%}.session-feedback button{padding:10px 5px;font-size:10px}.modal-backdrop{padding:8px}.modal-sheet{border-radius:22px;padding:22px}.lesson-row{grid-template-columns:38px 1fr}.lesson-progress{grid-column:2/3;text-align:left}.lesson-progress .mini-bar{width:100%}.lex-row{grid-template-columns:1fr}.lex-actions{justify-content:flex-end}}
 @media(max-width:430px){.mode-grid,.mode-grid.large{grid-template-columns:1fr}.hero-copy h2{font-size:29px}.top-actions .streak-pill{display:none}.metric-grid{grid-template-columns:1fr}.course-summary{grid-template-columns:1fr}.course-summary article:last-child{grid-column:auto}.session-stage h2{font-size:32px}.session-top{padding:16px 14px}.session-exit,.session-pause{font-size:10px;padding:9px}.session-bottom{padding:14px 14px 22px}.session-bottom button{min-width:0;flex:1}.daily-progress{grid-template-columns:1fr}.daily-ring{margin:auto}.daily-meta{grid-template-columns:1fr 1fr}.today-card .text-btn{width:100%;text-align:left}}
+
+/* ===================================================================
+   AJOUTS v5.0.0
+   Verdicts vocaux, niveau micro, diagnostic, accessibilité.
+   =================================================================== */
+
+/* Verdicts : chaque état a sa couleur. Une panne technique est neutre,
+   jamais rouge, car l'utilisateur n'y est pour rien. */
+.verdict-badge{display:inline-block;margin-top:10px;padding:7px 16px;border-radius:999px;
+  font-size:13px;font-weight:600;letter-spacing:.02em;border:1px solid var(--line);background:var(--panel2)}
+.verdict-badge[data-verdict="correct"]{color:#0b1f16;background:var(--green);border-color:var(--green)}
+.verdict-badge[data-verdict="probablement_correct"]{color:var(--green);border-color:var(--green)}
+.verdict-badge[data-verdict="proche"]{color:var(--gold);border-color:var(--gold)}
+.verdict-badge[data-verdict="a_retravailler"]{color:#ffb4a2;border-color:#7a3b2f}
+.verdict-badge[data-verdict="reconnaissance_incertaine"],
+.verdict-badge[data-verdict="aucune_parole"],
+.verdict-badge[data-verdict="micro_indisponible"],
+.verdict-badge[data-verdict="service_indisponible"]{color:var(--muted);border-style:dashed}
+
+/* Niveau micro en temps réel. Le trait doré marque le seuil de détection. */
+.mic-level{--niveau:0%;--seuil:50%;position:relative;height:6px;width:min(320px,70vw);
+  margin:16px auto 0;border-radius:99px;background:var(--panel2);overflow:hidden}
+.mic-level i{display:block;height:100%;width:var(--niveau);border-radius:99px;
+  background:linear-gradient(90deg,var(--green),var(--gold));transition:width .08s linear}
+.mic-level::after{content:"";position:absolute;top:-3px;bottom:-3px;left:var(--seuil);
+  width:2px;background:var(--gold);opacity:.75}
+.mic-level[data-etat="parole"] i{background:var(--green)}
+
+.feedback-hint{color:var(--muted);font-size:13px;margin:0 0 10px;text-align:center}
+
+/* Diagnostic */
+.diag-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;
+  padding:11px 0;border-bottom:1px solid var(--line)}
+.diag-row:last-child{border-bottom:0}
+.diag-row span{display:flex;flex-direction:column;gap:3px}
+.diag-row small{color:var(--muted);font-size:12px;line-height:1.45}
+.diag-row[data-etat="bad"]{background:linear-gradient(90deg,rgba(255,120,100,.06),transparent)}
+.bad-text{color:#ff9d8a}
+
+.test-card{margin-top:16px;border:1px solid var(--line);border-radius:var(--radius2);
+  background:var(--panel2);padding:14px 16px;display:grid;gap:9px}
+.test-card>div{display:flex;justify-content:space-between;gap:14px;font-size:14px}
+.test-card span{color:var(--muted)}
+.test-card b{text-align:right;word-break:break-word}
+.test-card b[data-verdict="correct"]{color:var(--green)}
+.test-card b[data-verdict="a_retravailler"]{color:#ff9d8a}
+
+/* Bandeau de mise à jour */
+.update-bar{position:fixed;inset:0 0 auto 0;z-index:60;padding:10px 16px;text-align:center;
+  background:var(--gold);color:#1a1206;font-size:14px;font-weight:600}
+.link-btn{background:none;border:0;color:inherit;text-decoration:underline;cursor:pointer;font:inherit}
+
+/* Trois dimensions de maîtrise dans le lexique */
+.lex-meta{display:flex;gap:3px;align-items:center;padding:0 8px}
+.lex-meta i{width:4px;height:16px;border-radius:2px;background:var(--panel2);position:relative;overflow:hidden}
+.lex-meta i::after{content:"";position:absolute;inset:auto 0 0 0;
+  height:calc(var(--n,0) / 7 * 100%);background:var(--green)}
+
+.unverified{display:inline-block;margin-top:5px;font-size:11px;color:var(--gold);
+  border:1px solid var(--gold);border-radius:99px;padding:1px 8px;opacity:.8}
+.small{font-size:12.5px}
+
+.seg{display:flex;gap:8px;margin:10px 0}
+.seg button{flex:1;padding:11px;border-radius:var(--radius2);border:1px solid var(--line);
+  background:var(--panel2);color:var(--text);cursor:pointer;font:inherit}
+.seg button.active{border-color:var(--gold);color:var(--gold)}
+
+select{width:100%;padding:11px;border-radius:var(--radius2);border:1px solid var(--line);
+  background:var(--panel2);color:var(--text);font:inherit}
+
+/* Accessibilité : focus visible partout, cibles tactiles suffisantes */
+:where(button,a,select,input,[tabindex]):focus-visible{
+  outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+button,.icon-btn{min-height:44px}
+.icon-btn{min-width:44px}
+
+/* Respect du réglage système de réduction des animations */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
+}

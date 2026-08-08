@@ -1,79 +1,157 @@
-# Lëtzebuergesch am Auto · REVOLUTION 4.0
+# Lëtzebuergesch am Auto · v5.0.0
 
-Cette version transforme le prototype en base de produit commercial.
+Apprentissage oral du luxembourgeois, conçu pour les trajets.
 
-Elle fonctionne immédiatement en mode local sur GitHub Pages. Les fonctions commerciales sont séparées du frontend pour qu'aucun secret Stripe ou Google ne soit exposé dans le navigateur.
+Ce lot corrige les blocages P0 et refait entièrement la chaîne vocale.
+Aucun contenu luxembourgeois n'a été ajouté, modifié ou inventé.
 
-## Ce qui fonctionne sans aucun compte
+**Le contenu reste volontairement à 35 leçons et 255 expressions.**
+Une application orale avec 255 expressions et une reconnaissance qui fonctionne
+vaut mieux qu'une application avec 5 000 expressions qui comprend mal.
 
-- PWA installable.
-- 35 leçons et 255 expressions actuelles.
-- Mode trajet intelligent.
-- Révisions espacées.
-- Sprint oral.
-- Chiffres.
-- Écoute libre.
-- Lexique, favoris et recherche.
-- Progression et statistiques.
-- Export et import.
-- Synthèse vocale locale.
-- Écho de la voix.
-- Reconnaissance du navigateur en secours.
-- Migration de la progression des versions précédentes.
+---
 
-## Ce qui devient disponible après configuration du backend
+## Par où commencer
 
-- Création de comptes.
-- Synchronisation multi-appareils.
-- Abonnement Premium mensuel et annuel.
-- Stripe Checkout.
-- Portail client Stripe.
-- Mise à jour automatique de l'accès Premium par webhook.
-- Reconnaissance cloud du luxembourgeois avec Google Cloud Speech-to-Text V2, modèle Chirp 2, locale lb-LU.
-- Quota d'essai cloud pour les comptes gratuits.
+1. `docs/DEPLOIEMENT.md` : mise en ligne, une étape à la fois.
+2. `docs/PIPELINE_VOCAL.md` : pourquoi le micro échouait, chiffres à l'appui.
+3. `docs/TESTS_TERRAIN.md` : protocole de tests sur téléphone et en voiture.
+4. `docs/ROLLBACK.md` : retour arrière, trois niveaux.
+5. `CHANGELOG.md` : tout ce qui change.
 
-## Architecture
+**Ne remplace pas ton `config.js` par celui du ZIP.**
+Recopie tes trois valeurs Supabase dans `config.example.js`, puis renomme-le.
 
-Frontend : GitHub Pages ou autre hébergeur statique.
+---
 
-Backend : Supabase Auth, Postgres, RLS et Edge Functions.
+## Structure
 
-Paiement : Stripe Billing + Checkout + Customer Portal.
+```
+index.html              coquille, 8 vues
+config.example.js       modèle de configuration publique
+cours.js                contenu, identifiants permanents
+cours.legacy-map.json   table de migration des anciennes clés
+styles.css              feuille de style
+sw.js                   service worker
+manifest.webmanifest    manifeste PWA
 
-Reconnaissance cloud : Google Cloud Speech-to-Text V2.
+src/
+  app.js                point d'entrée et orchestration
+  core/
+    content.js          accès au contenu par identifiant
+    state.js            état, sauvegarde, file de synchronisation
+    scheduler.js        répétition espacée à trois dimensions
+    session.js          moteur de séance piloté par le temps
+    migrate.js          migration des anciennes progressions
+  audio/
+    mic.js              permission, appareil, niveau, Bluetooth
+    vad.js              détection de parole, plancher de bruit adaptatif
+    recorder.js         enregistrement piloté par la détection
+    tts.js              synthèse vocale
+  speech/
+    normalize.js        normalisation adaptée au luxembourgeois
+    score.js            comparaison et verdict pédagogique
+    engine.js           orchestration du pipeline complet
+  data/
+    supabase.js         authentification, profil, droits, progression
+    sync.js             synchronisation, file hors ligne, conflits
+  ui/
+    render.js           rendu de la vue active
+    diagnostic.js       diagnostic micro et mode test
+  vendor/
+    supabase.esm.js     client Supabase 2.112.2, local, pas de CDN
 
-Contenu linguistique : `cours.js` reste la source actuelle. Pour une commercialisation, chaque expression doit être relue et validée avec une source linguistique fiable, notamment le Lëtzebuerger Online Dictionnaire du Zenter fir d'Lëtzebuerger Sprooch.
+supabase/
+  schema.sql            tables, index, RLS, policies, triggers, quota
+  admin-outils.sql      Premium de test, suivi de consommation, contrôles
+  functions/speech-transcribe/index.ts
+  functions/delete-account/index.ts
 
-## Ordre de mise en ligne recommandé
+tests/                  47 tests de non-régression
+scripts/                génération des identifiants de contenu
+docs/                   déploiement, migration, rollback, tests
+```
 
-1. Tester cette version en local sur ton téléphone.
-2. Remplacer les fichiers du dépôt GitHub par ceux de ce dossier.
-3. Vérifier la PWA, les leçons, le micro et les sessions.
-4. Créer Supabase et exécuter `supabase/schema.sql`.
-5. Créer Stripe en mode test et créer deux prix récurrents.
-6. Créer Google Cloud Speech-to-Text.
-7. Déployer les Edge Functions.
-8. Renseigner uniquement les valeurs publiques dans `config.js`.
-9. Tester comptes, abonnement et reconnaissance cloud.
-10. Compléter les pages juridiques.
-11. Vérifier les prix, la TVA et les règles consommateurs applicables.
-12. Passer Stripe en production seulement après les tests.
+Modules ES natifs. Aucun outil de construction. Les fichiers se déposent tels
+quels sur GitHub Pages.
 
-Lis `docs/DEPLOIEMENT_COMPLET.md` pour les étapes exactes.
+---
 
-## Sécurité importante
+## Ce qui fonctionne sans backend
 
-Ne mets jamais dans `config.js` :
+PWA installable, 35 leçons, séances minutées, répétition espacée, lexique,
+favoris, statistiques, export et import, synthèse vocale, enregistrement,
+écho de sa propre voix, reconnaissance de secours, hors ligne, diagnostic.
 
-- la clé secrète Stripe ;
-- le secret du webhook Stripe ;
-- la clé Supabase service role ;
-- la clé privée du compte de service Google.
+## Ce qui nécessite Supabase
+
+Comptes, synchronisation multi-appareils, reconnaissance cloud `lb-LU`,
+droits Premium, export RGPD, suppression de compte.
+
+---
+
+## Sécurité
+
+Ne jamais placer dans `config.js` ni sur GitHub :
+
+- `sb_secret_...` ou la clé `service_role`
+- une clé secrète Stripe ou un secret de webhook
+- la clé privée du compte de service Google
 
 Ces valeurs vont uniquement dans les secrets des Edge Functions.
+La clé publiable `sb_publishable_` est publique par conception, protégée par la RLS.
 
-## Statut de cette version
+Le statut Premium est décidé par le serveur. Modifier `localStorage` ne débloque
+plus rien.
 
-Le frontend est un prototype avancé et fonctionnel. L'architecture de paiement et de reconnaissance cloud est fournie, mais elle doit être configurée avec tes propres comptes de services avant de pouvoir encaisser de vrais abonnements.
+---
 
-Les pages `legal.html`, `privacy.html` et `terms.html` sont des modèles de travail, pas des textes juridiques finaux.
+## Tests
+
+```
+node --test "tests/*.test.mjs"
+```
+
+47 tests. Ils couvrent les identifiants permanents, la migration, la
+normalisation luxembourgeoise, les seuils de comparaison, la règle selon
+laquelle une panne technique n'écrit jamais, et la durée réelle des séances.
+
+Douze d'entre eux vérifient que l'application démarre réellement : contenu
+chargé, modules importés, vues rendues, migration effective, dégradation propre
+sans micro ni réseau. Ils nécessitent jsdom :
+
+```
+npm install --no-save jsdom
+node --test "tests/*.test.mjs"
+```
+
+Sans jsdom, ces douze tests sont ignorés et les 35 autres tournent normalement.
+
+Régénérer les identifiants après modification du contenu :
+
+```
+node scripts/build-content-ids.mjs cours.js cours.js cours.legacy-map.json
+```
+
+Le script est idempotent. Il conserve les identifiants existants.
+
+---
+
+## Limites assumées
+
+- **iOS écran verrouillé** : la synthèse vocale s'arrête. La promesse « pose le
+  téléphone » n'est pas encore tenue sur iPhone écran éteint.
+- **`lb-LU` sur `chirp_3`** : annoncé en Preview par Google au 7 août 2026, pas
+  en disponibilité générale. À revérifier avant mise en vente.
+- **Transcription et prononciation restent deux choses différentes.**
+  L'application ne prétend pas noter un accent.
+- **Aucune expression validée linguistiquement.** Le champ `st` vaut
+  `unverified` sur les 255 expressions. Bloquant avant commercialisation.
+- **Stripe non implémenté.** Volontaire, après stabilisation vocale.
+- **Contenu servi en clair** dans `cours.js`. Le verrou Premium sur les leçons
+  reste cosmétique tant que la distribution serveur n'existe pas.
+
+---
+
+Rédigé et conçu par :
+Fouad SEBANE

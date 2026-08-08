@@ -8,14 +8,16 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Lëtzebuergesch">
-  <title>Lëtzebuergesch am Auto · Revolution</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.0.0">
-  <link rel="icon" href="icon-192.png?v=4.0.0">
-  <link rel="apple-touch-icon" href="icon-192.png?v=4.0.0">
-  <link rel="stylesheet" href="styles.css?v=4.0.0">
+  <title>Lëtzebuergesch am Auto</title>
+  <link rel="manifest" href="manifest.webmanifest?v=5.0.0">
+  <link rel="icon" href="icon-192.png?v=5.0.0">
+  <link rel="apple-touch-icon" href="icon-192.png?v=5.0.0">
+  <link rel="stylesheet" href="styles.css?v=5.0.0">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
+  <div id="updateBar" class="update-bar" hidden role="status">Une nouvelle version est prête.
+    <button id="updateReloadBtn" class="link-btn">Recharger maintenant</button></div>
   <div id="offlineBar" class="offline-bar" hidden>Mode hors ligne actif. Les fonctions cloud sont temporairement indisponibles.</div>
 
   <div class="app-shell">
@@ -25,7 +27,7 @@
           <span class="brand-mark">L</span>
           <span><strong>Lëtzebuergesch</strong><small>am Auto</small></span>
         </button>
-        <span class="version-badge">REVOLUTION 4.0</span>
+        <span class="version-badge">VERSION 5.0</span>
       </div>
 
       <nav class="side-nav">
@@ -99,7 +101,7 @@
         </div>
       </section>
 
-      <section class="view" id="view-learn" data-view="learn">
+      <section class="view" id="view-learn" data-view="learn" hidden aria-hidden="true">
         <div class="section-title-row"><div><p class="kicker">SESSION ORALE</p><h2>Choisis ton trajet</h2></div><span class="live-badge"><i></i> moteur adaptatif</span></div>
         <div class="duration-picker" id="durationPicker">
           <button data-min="10">10 <span>min</span></button>
@@ -116,13 +118,13 @@
         </article>
       </section>
 
-      <section class="view" id="view-courses" data-view="courses">
+      <section class="view" id="view-courses" data-view="courses" hidden aria-hidden="true">
         <div class="section-title-row"><div><p class="kicker">PARCOURS</p><h2 id="courseHeadline">35 leçons, une progression claire</h2></div><div class="search-wrap"><input id="courseSearch" type="search" placeholder="Chercher une leçon"><span>⌕</span></div></div>
         <div class="course-summary" id="courseSummary"></div>
         <div id="courseList" class="course-list"></div>
       </section>
 
-      <section class="view" id="view-practice" data-view="practice">
+      <section class="view" id="view-practice" data-view="practice" hidden aria-hidden="true">
         <div class="section-title-row"><div><p class="kicker">ENTRAÎNEMENT</p><h2>Travaille exactement ce qu'il te faut</h2></div></div>
         <div class="practice-grid">
           <button class="practice-card" data-mode="review"><span class="pc-icon">↺</span><div><b>Révisions intelligentes</b><small>Ce qui arrive à échéance aujourd'hui.</small></div><strong id="practiceDue">0</strong></button>
@@ -140,7 +142,7 @@
         <div id="lexList" class="lex-list"></div>
       </section>
 
-      <section class="view" id="view-progress" data-view="progress">
+      <section class="view" id="view-progress" data-view="progress" hidden aria-hidden="true">
         <div class="section-title-row"><div><p class="kicker">PROGRESSION</p><h2>Tu vois ce qui avance vraiment</h2></div><button class="secondary" id="exportProgressBtn">Exporter</button></div>
         <div class="metric-grid">
           <article><span>Temps total</span><strong id="metricHours">0 h</strong><small id="metricSessions">0 séance</small></article>
@@ -156,7 +158,7 @@
         <article class="panel"><div class="card-head"><div><p class="kicker">SAUVEGARDE</p><h3>Garde ta progression</h3></div></div><p class="muted">En mode local, tes données restent sur cet appareil. Avec un compte Premium connecté, la synchronisation cloud peut être activée.</p><div class="row-actions"><button class="secondary" id="importProgressBtn">Importer</button><input type="file" id="importProgressFile" accept="application/json" hidden><button class="danger-ghost" id="resetProgressBtn">Remise à zéro</button></div></article>
       </section>
 
-      <section class="view" id="view-voice" data-view="voice">
+      <section class="view" id="view-voice" data-view="voice" hidden aria-hidden="true">
         <div class="voice-hero">
           <div><p class="kicker">VOIX ET MICRO</p><h2>On règle d'abord ce qui t'empêchait de parler.</h2><p>Le navigateur reste un secours. La version commerciale est prête à utiliser un moteur cloud en luxembourgeois <b>lb-LU</b> quand il est configuré.</p></div>
           <div class="mic-visual" id="micVisual"><div class="mic-dot"></div><div class="wave" id="micWave"></div></div>
@@ -180,24 +182,40 @@
           <article class="panel"><p class="kicker">VOIX DU COURS</p><h3>Prononciation</h3><select id="luxVoiceSelect"></select><button class="secondary full" id="voicePreviewBtn">Écouter un exemple</button></article>
           <article class="panel"><p class="kicker">VOIX DU PROFESSEUR</p><h3>Français</h3><select id="frVoiceSelect"></select><label class="range-label">Vitesse <span id="voiceRateLabel">0,85×</span></label><input type="range" id="voiceRate" min="0.55" max="1.15" value="0.85" step="0.05"></article>
         </div>
+      
+        <div class="panel">
+          <p class="kicker">ENVIRONNEMENT</p>
+          <h3>Où écoutes-tu&nbsp;?</h3>
+          <div class="seg" id="audioProfile" role="group" aria-label="Profil audio">
+            <button data-profile="calme" class="active">Calme</button>
+            <button data-profile="voiture">Voiture</button>
+          </div>
+          <p class="muted small">Le profil voiture relève le seuil de détection et allonge le silence toléré. Le moteur mesure le bruit réel avant chaque question, moteur et ventilation compris.</p>
+        </div>
+
+        <div class="panel">
+          <p class="kicker">MICROPHONE</p>
+          <h3>Appareil utilisé</h3>
+          <select id="micSelect" aria-label="Choix du microphone"><option value="">Micro par défaut de l'appareil</option></select>
+          <p class="muted small">En Bluetooth mains libres, la voiture impose souvent un micro basse qualité. Si la reconnaissance se dégrade nettement en roulant, essaie le micro du téléphone.</p>
+        </div>
       </section>
 
-      <section class="view" id="view-premium" data-view="premium">
+      <section class="view" id="view-premium" data-view="premium" hidden aria-hidden="true">
         <div class="premium-hero">
           <span class="premium-star">✦</span>
           <p class="kicker">LËTZEBUERGESCH PREMIUM</p>
           <h2>Le trajet devient un vrai programme d'apprentissage.</h2>
           <p>Compte, synchronisation, reconnaissance cloud en luxembourgeois, parcours complet, dialogues, statistiques avancées et hors ligne renforcé.</p>
-          <div class="billing-toggle" id="billingToggle"><button class="active" data-cycle="year">Annuel <span>économise 37%</span></button><button data-cycle="month">Mensuel</button></div>
-        </div>
+          </div>
         <div class="pricing-grid">
           <article class="price-card free"><p class="kicker">DÉCOUVERTE</p><h3>Gratuit</h3><div class="price"><strong>0 €</strong></div><ul><li>Premières leçons</li><li>Sessions courtes</li><li>Progression locale</li><li>Reconnaissance navigateur si disponible</li></ul><button class="secondary full" id="stayFreeBtn">Continuer gratuitement</button></article>
-          <article class="price-card premium featured"><span class="recommended">RECOMMANDÉ</span><p class="kicker">PREMIUM</p><h3>Tout débloquer</h3><div class="price" id="premiumPrice"><strong>59,99 €</strong><span>/ an</span></div><div class="equiv" id="premiumEquiv">soit 5,00 € / mois</div><ul><li>Parcours complet</li><li>Sessions trajets illimitées</li><li>Reconnaissance cloud lb-LU</li><li>Dialogues et révisions intelligentes</li><li>Synchronisation multi-appareils</li><li>Statistiques avancées</li><li>Accès hors ligne aux contenus téléchargés</li><li>Nouveaux cours inclus</li></ul><button class="primary big full" id="subscribeBtn">Choisir Premium</button><small class="fineprint">Prix de démonstration à valider avant commercialisation. Paiement réel seulement après configuration Stripe.</small></article>
+          <article class="price-card premium featured"><span class="recommended">RECOMMANDÉ</span><p class="kicker">PREMIUM</p><h3>Tout débloquer</h3><div class="price" id="premiumPrice"><strong>59,99 €</strong><span>/ an</span></div><div class="equiv" id="premiumEquiv">soit 5,00 € / mois</div><ul><li>Parcours complet</li><li>Sessions trajets illimitées</li><li>Reconnaissance cloud lb-LU</li><li>Dialogues et révisions intelligentes</li><li>Synchronisation multi-appareils</li><li>Statistiques avancées</li><li>Accès hors ligne aux contenus téléchargés</li><li>Nouveaux cours inclus</li></ul><button class="primary big full" id="subscribeBtn">Choisir Premium</button><small class="fineprint">Prix de démonstration à valider avant commercialisation. Paiement réel seulement après configuration Stripe.</p><p class="muted small" id="premiumState">Le paiement n'est pas encore ouvert.</small></article>
         </div>
         <article class="trust-strip"><div><strong>Résiliation simple</strong><span>via le portail de facturation</span></div><div><strong>Paiement sécurisé</strong><span>géré par Stripe</span></div><div><strong>Données séparées</strong><span>progression protégée par compte</span></div></article>
       </section>
 
-      <section class="view" id="view-account" data-view="account">
+      <section class="view" id="view-account" data-view="account" hidden aria-hidden="true">
         <div class="account-grid">
           <article class="profile-card">
             <div class="profile-avatar" id="profileAvatar">F</div>
@@ -244,11 +262,20 @@
       <p class="sessionPhonetic" id="sessionPhonetic"></p>
       <p class="sessionTranslation" id="sessionTranslation"></p>
       <div class="heard" id="sessionHeard" hidden></div>
+      <div class="verdict-badge" id="sessionVerdict" hidden role="status" aria-live="polite"></div>
+      <div class="mic-level" id="micLevel" aria-hidden="true"><i></i></div>
       <div class="session-feedback" id="sessionFeedback" hidden>
-        <button data-self="hard">À retravailler</button><button data-self="ok">Je l'ai dit</button><button data-self="easy">Facile</button>
+        <p class="feedback-hint">Je n'ai pas pu vérifier. Tu peux le dire toi-même, ou ne rien faire.</p>
+        <button data-self="hard">À retravailler</button><button data-self="ok">Je l'ai bien dit</button><button data-self="easy">Facile</button>
       </div>
     </div>
     <div class="session-bottom"><button id="sessionRepeatBtn">↺ Répéter</button><button id="sessionSkipBtn">Suivant →</button></div>
+  </div>
+
+  <div class="modal-backdrop" id="mergeModal" hidden>
+    <div class="modal-sheet small-sheet" role="dialog" aria-modal="true" aria-labelledby="mergeTitle">
+      <div id="mergeModalBody"></div>
+    </div>
   </div>
 
   <div class="modal-backdrop" id="checkoutModal" hidden>
@@ -258,8 +285,9 @@
     </div>
   </div>
 
-  <script src="config.js?v=4.0.0"></script>
-  <script src="cours.js?v=4.0.0"></script>
-  <script src="app.js?v=4.0.0"></script>
+  <script src="config.js?v=5.0.0"></script>
+  <script src="cours.js?v=5.0.0"></script>
+  <script type="module" src="src/app.js?v=5.0.0"></script>
+  <noscript><p style="padding:24px;color:#eef5f8">Cette application a besoin de JavaScript.</p></noscript>
 </body>
 </html>

@@ -1,0 +1,3 @@
+@supabase/supabase-js 2.112.2
+Bundle ESM généré par esbuild.
+Regénérer : voir scripts/vendor-supabase.sh

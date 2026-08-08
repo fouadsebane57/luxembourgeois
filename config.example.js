@@ -20,8 +20,8 @@ window.LETZ_CONFIG = {
   appName: "Lëtzebuergesch am Auto",
 
   // Reprends ici les valeurs déjà présentes dans ton config.js actuel.
-  supabaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co", 
-  supabaseAnonKey: " "sb_publishable_RS1iTvozqjWlmE4OOtx6Wg_oOv5FDKJ",                 // clé publiable sb_publishable_... , publique par conception
+  supabaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co",
+  supabaseAnonKey: "",                 // clé publiable sb_publishable_... , publique par conception
   functionsBaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co/functions/v1",
 
   pricing: { monthly: 7.99, yearly: 59.99, currency: "EUR" },
