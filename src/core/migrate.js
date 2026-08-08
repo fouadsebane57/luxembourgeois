@@ -18,9 +18,11 @@
 
 import { fusionner, normaliserEntree } from "./scheduler.js";
 
-export const CLE_V5 = "letz:v5";
+export const CLE_V5 = "lulu:v5";
+export const CLE_V5_ANCIENNE = "letz:v5";   // avant le changement de nom
 export const CLE_V4 = "letz:v4";
 export const CLE_SAUVEGARDE = "letz:v4:backup";
+export const CLE_FILE = "lulu:v5:queue";
 
 let TABLE = null;
 let TABLE_OK = false;
@@ -38,7 +40,7 @@ export const tableChargee = () => TABLE_OK;
 export async function chargerTable(url = "cours.legacy-map.json") {
   if (TABLE_OK) return TABLE;
 
-  const embarquee = window.LETZ_LEGACY_MAP;
+  const embarquee = window.LULU_LEGACY_MAP || window.LETZ_LEGACY_MAP;
   if (embarquee && Object.keys(embarquee).length) {
     TABLE = embarquee; TABLE_OK = true; return TABLE;
   }
@@ -133,6 +135,16 @@ export function lireV3() {
  */
 export function migrerLocal(cours) {
   const rapport = { source: "aucune", traduites: 0, fusionnees: 0, inconnues: 0, sauvegarde: false, bloquee: false };
+
+  // Un état déjà au format v5, sous l'ancien nom, se reprend tel quel.
+  try {
+    const ancien = JSON.parse(localStorage.getItem(CLE_V5_ANCIENNE) || "null");
+    if (ancien && ancien.schema === 5) {
+      rapport.source = "letz:v5";
+      rapport.traduites = Object.keys(ancien.progress || {}).length;
+      return { etat: ancien, rapport };
+    }
+  } catch (_) {}
 
   let brut = null;
   try { brut = JSON.parse(localStorage.getItem(CLE_V4) || "null"); } catch (_) {}

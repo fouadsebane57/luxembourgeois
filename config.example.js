@@ -1,27 +1,39 @@
 /* =====================================================================
-   CONFIGURATION PUBLIQUE
+   LULU TRAJET · CONFIGURATION PUBLIQUE
 
-   ATTENTION : ne remplace PAS ton config.js existant par ce fichier.
-   Recopie tes trois valeurs déjà renseignées dans le modèle ci-dessous,
-   puis enregistre le résultat sous le nom config.js.
+   MODE D'EMPLOI
+   1. Renseigne les trois valeurs marquées À REMPLIR.
+   2. Enregistre ce fichier sous le nom exact  config.js
+   3. Envoie-le à la racine du dépôt, à côté de index.html.
 
-   Ce fichier ne doit contenir QUE des valeurs publiques.
+   Sans ces trois valeurs, la reconnaissance du luxembourgeois ne peut
+   pas fonctionner. L'application te le dira clairement dans l'onglet
+   Voix et micro, avec la valeur exacte qui manque.
+
+   Ce fichier est PUBLIC. Il ne doit contenir que des valeurs publiques.
    Ne jamais y mettre :
-     sb_secret_...        clé secrète Supabase
-     service_role         clé historique équivalente
-     sk_live / sk_test    clé secrète Stripe
-     whsec_...            secret de webhook Stripe
+     une clé secrète Supabase, sb_secret_ ou service_role
+     une clé secrète Stripe, sk_live ou sk_test
+     un secret de webhook, whsec_
      la clé privée du compte de service Google
 
    Ces valeurs vont uniquement dans les secrets des Edge Functions.
    ===================================================================== */
-window.LETZ_CONFIG = {
-  appVersion: "5.0.0",
-  appName: "Lëtzebuergesch am Auto",
+window.LULU_CONFIG = {
+  appVersion: "5.1.0",
+  appName: "LULU Trajet",
 
-  // Reprends ici les valeurs déjà présentes dans ton config.js actuel.
+  // À REMPLIR · Supabase, menu Project Settings, section Data API.
+  // Doit ressembler à https://xxxxxxxx.supabase.co
   supabaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co",
-  supabaseAnonKey: "",                 // clé publiable sb_publishable_... , publique par conception
+
+  // À REMPLIR · Supabase, menu Project Settings, section API Keys.
+  // Prends la clé PUBLIABLE, celle qui commence par sb_publishable_
+  // ou, sur les anciens projets, la clé anon qui commence par eyJ
+  // Cette clé est publique par conception, elle est protégée par la RLS.
+  supabaseAnonKey: "",
+
+  // À REMPLIR · l'adresse Supabase ci-dessus, suivie de /functions/v1
   functionsBaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co/functions/v1",
 
   pricing: { monthly: 7.99, yearly: 59.99, currency: "EUR" },
@@ -29,9 +41,12 @@ window.LETZ_CONFIG = {
   free: {
     lessons: 8,
     maxSessionMinutes: 20,
-    cloudSpeechTestsPerMonth: 30       // information affichée ; le vrai quota est serveur
+    cloudSpeechTestsPerMonth: 30      // affichage seulement, le vrai quota est serveur
   },
 
   supportEmail: "",
   legalBusinessName: "À COMPLÉTER"
 };
+
+// Compatibilité avec la version précédente, qui lisait LETZ_CONFIG.
+window.LETZ_CONFIG = window.LULU_CONFIG;

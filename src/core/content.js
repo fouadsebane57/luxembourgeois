@@ -5,7 +5,7 @@
    Une expression est identifiée par son `id`, jamais par sa position.
    =================================================================== */
 
-const C = () => window.LETZ_CONTENT || { ETAPES: [], COURS: [], DIALOGUES: [], BLOCS: [], contentVersion: "0" };
+const C = () => window.LULU_CONTENT || window.LETZ_CONTENT || { ETAPES: [], COURS: [], DIALOGUES: [], BLOCS: [], contentVersion: "0" };
 
 export const ETAPES = () => C().ETAPES;
 export const COURS = () => C().COURS;

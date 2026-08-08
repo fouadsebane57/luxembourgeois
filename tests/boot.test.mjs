@@ -79,21 +79,21 @@ if (JSDOM) {
   const url = (p) => pathToFileURL(join(RACINE, p)).href;
 
   test("le contenu se charge et expose 35 leçons", () => {
-    const c = dom.window.LETZ_CONTENT;
-    assert.ok(c, "window.LETZ_CONTENT absent");
+    const c = dom.window.LULU_CONTENT;
+    assert.ok(c, "window.LULU_CONTENT absent");
     assert.equal(c.COURS.length, 35);
-    assert.equal(c.contentVersion, "5.0.0");
+    assert.equal(c.contentVersion, "5.1.0");
   });
 
   test("toutes les expressions portent un identifiant permanent", () => {
-    const ids = dom.window.LETZ_CONTENT.COURS.flatMap((l) => l.i.map((i) => i.id));
+    const ids = dom.window.LULU_CONTENT.COURS.flatMap((l) => l.i.map((i) => i.id));
     assert.equal(ids.length, 255);
     assert.ok(ids.every((i) => /^lx[0-9a-f]{8}$/.test(i)), "identifiant au mauvais format");
     assert.equal(new Set(ids).size, 248, "les 7 doublons doivent partager leur identifiant");
   });
 
   test("chaque leçon porte un identifiant unique", () => {
-    const lids = dom.window.LETZ_CONTENT.COURS.map((l) => l.lid);
+    const lids = dom.window.LULU_CONTENT.COURS.map((l) => l.lid);
     assert.equal(new Set(lids).size, 35);
   });
 
@@ -143,17 +143,17 @@ if (JSDOM) {
 
   test("REGRESSION : sans table de migration, l'ancienne progression n'est pas détruite", async () => {
     const { migrerLocal, CLE_V4 } = await import(url("src/core/migrate.js") + "?sansTable");
-    const sauve = dom.window.LETZ_LEGACY_MAP;
-    delete dom.window.LETZ_LEGACY_MAP;
+    const sauve = dom.window.LULU_LEGACY_MAP;
+    delete dom.window.LULU_LEGACY_MAP;
     dom.window.localStorage.setItem(CLE_V4, JSON.stringify({ progress: { "0-0": { n: 5 } } }));
 
-    const { etat, rapport } = migrerLocal(dom.window.LETZ_CONTENT.COURS);
+    const { etat, rapport } = migrerLocal(dom.window.LULU_CONTENT.COURS);
     // Aucune migration ne doit avoir lieu, et surtout aucun état vide écrit.
     assert.equal(rapport.bloquee, true, "la migration aurait dû être bloquée");
     assert.equal(etat, null);
     assert.ok(dom.window.localStorage.getItem(CLE_V4), "l'ancienne progression a été perdue");
 
-    dom.window.LETZ_LEGACY_MAP = sauve;
+    dom.window.LULU_LEGACY_MAP = sauve;
   });
 
   test("le pipeline vocal se dégrade proprement sans micro ni réseau", async () => {
@@ -171,10 +171,13 @@ if (JSDOM) {
   test("le diagnostic répond sans micro et sans réseau", async () => {
     const D = await import(url("src/ui/diagnostic.js"));
     const lignes = await D.controlesRapides();
-    assert.ok(lignes.length >= 8, "diagnostic incomplet");
-    for (const [nom, etat] of lignes) {
-      assert.ok(nom, "ligne de diagnostic sans intitulé");
-      assert.ok(["ok", "warn", "bad"].includes(etat), `état inattendu: ${etat}`);
+    assert.ok(lignes.length >= 10, "diagnostic incomplet");
+    for (const l of lignes) {
+      assert.ok(l.nom, "ligne de diagnostic sans intitulé");
+      assert.ok(["ok", "warn", "bad"].includes(l.etat), `état inattendu: ${l.etat}`);
+      // Toute ligne en défaut doit dire quoi faire. C'est la règle
+      // qui remplace les « À régler » muets de la 5.0.0.
+      if (l.etat === "bad") assert.ok(l.detail, `ligne ${l.nom} en défaut sans explication`);
     }
   });
 

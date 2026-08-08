@@ -1,5 +1,5 @@
 -- =====================================================================
--- LËTZEBUERGESCH AM AUTO · SCHÉMA v5.0.0
+-- LULU TRAJET · SCHÉMA v5.0.0
 -- À exécuter dans Supabase : SQL Editor > New query > coller > Run.
 -- Le script est idempotent. Il peut être relancé sans casse.
 --

@@ -4,15 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#08131f">
-  <meta name="description" content="Lëtzebuergesch am Auto, apprentissage oral du luxembourgeois pensé pour les trajets.">
+  <meta name="description" content="LULU Trajet, apprentissage oral du luxembourgeois pensé pour les trajets.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Lëtzebuergesch">
-  <title>Lëtzebuergesch am Auto</title>
-  <link rel="manifest" href="manifest.webmanifest?v=5.0.0">
-  <link rel="icon" href="icon-192.png?v=5.0.0">
-  <link rel="apple-touch-icon" href="icon-192.png?v=5.0.0">
-  <link rel="stylesheet" href="styles.css?v=5.0.0">
+  <title>LULU Trajet</title>
+  <link rel="manifest" href="manifest.webmanifest?v=5.1.0">
+  <link rel="icon" href="favicon.png?v=5.1.0"><link rel="icon" sizes="32x32" href="icon-32.png?v=5.1.0">
+  <link rel="apple-touch-icon" href="icon-180.png?v=5.1.0">
+  <link rel="stylesheet" href="styles.css?v=5.1.0">
 </head>
 <body>
   <div id="toast" class="toast" aria-live="polite"></div>
@@ -27,7 +27,7 @@
           <span class="brand-mark">L</span>
           <span><strong>Lëtzebuergesch</strong><small>am Auto</small></span>
         </button>
-        <span class="version-badge">VERSION 5.0</span>
+        <span class="version-badge">LULU TRAJET</span>
       </div>
 
       <nav class="side-nav">
@@ -49,9 +49,9 @@
 
     <main class="main">
       <header class="topbar">
-        <div>
-          <p class="eyebrow" id="pageEyebrow">BONJOUR</p>
-          <h1 id="pageTitle">Ton trajet devient ton cours.</h1>
+        <div id="pageHead">
+          <p class="eyebrow" id="pageEyebrow"></p>
+          <h1 id="pageTitle"></h1>
         </div>
         <div class="top-actions">
           <div class="streak-pill" title="Jours consécutifs"><span>🔥</span><strong id="streakTop">0</strong></div>
@@ -59,46 +59,53 @@
         </div>
       </header>
 
-      <section class="view active" id="view-home" data-view="home">
-        <div class="hero-grid">
-          <article class="hero-card">
-            <div class="hero-copy">
-              <p class="kicker">MODE TRAJET</p>
-              <h2>Pose le téléphone.<br>Parle. Écoute. Progresse.</h2>
-              <p>Une séance orale qui avance seule, s'adapte à tes réponses et remet au bon moment ce que tu oublies.</p>
-              <div class="hero-actions">
-                <button class="primary big" id="startSmartHome">Démarrer ma séance</button>
-                <button class="secondary big" data-route="voice">Tester ma voix</button>
-              </div>
-              <div class="safety-line">À lancer avant de démarrer. Aucun écran à manipuler pendant la conduite.</div>
-            </div>
-            <div class="hero-orbit" aria-hidden="true">
-              <div class="orbit-ring r1"></div><div class="orbit-ring r2"></div><div class="orbit-ring r3"></div>
-              <div class="orbit-core"><span id="heroMinutes">20</span><small>min</small></div>
-              <span class="orbit-tag t1">Écoute</span><span class="orbit-tag t2">Révision</span><span class="orbit-tag t3">Oral</span>
-            </div>
-          </article>
+            <section class="view active" id="view-home" data-view="home">
 
-          <article class="today-card">
-            <div class="card-head"><div><p class="kicker">AUJOURD'HUI</p><h3 id="todayLesson">Leçon 1</h3></div><span class="status-pill" id="todayStage">Étape 1</span></div>
-            <p class="muted" id="todayDescription"></p>
-            <div class="daily-progress">
-              <div class="daily-ring" id="dailyRing"><strong id="dailyPct">0%</strong><span>objectif</span></div>
-              <div class="daily-meta"><div><strong id="dailyMinutes">0 min</strong><span>sur <b id="dailyGoal">20</b> min</span></div><div><strong id="reviewCount">0</strong><span>à revoir</span></div></div>
-            </div>
-            <button class="text-btn" data-route="progress">Voir ma progression →</button>
-          </article>
+        <!-- Bandeau d'accueil. Une seule information dominante :
+             où j'en suis, et le bouton pour continuer. -->
+        <div class="welcome">
+          <img class="welcome-logo" src="icon-192.png?v=5.1.0" alt="" width="56" height="56">
+          <h1 id="welcomeGreeting">Moien 👋</h1>
+          <p id="welcomeLine">Apprends le luxembourgeois pendant tes trajets. Écoute, répète, progresse.</p>
         </div>
 
-        <div class="section-title-row"><div><p class="kicker">CHOISIS TON RYTHME</p><h2>Un mode pour chaque trajet</h2></div><button class="text-btn" data-route="learn">Tout voir →</button></div>
-        <div class="mode-grid" id="homeModes"></div>
-
-        <div class="stats-strip">
-          <div><span>Leçons</span><strong id="homeLessons">0 / 35</strong></div>
-          <div><span>Expressions solides</span><strong id="homeSolid">0</strong></div>
-          <div><span>Temps total</span><strong id="homeHours">0 h</strong></div>
-          <div><span>Série</span><strong id="homeStreak">0 j</strong></div>
+        <div class="resume-card">
+          <div class="resume-ring" id="homeRing" role="img" aria-labelledby="homeRingLabel">
+            <b id="homeRingPct">0%</b>
+          </div>
+          <div class="resume-text">
+            <span id="homeRingLabel">0 leçon terminée</span>
+            <b id="resumeSub">Leçon 1</b>
+          </div>
+          <button class="primary huge full" id="resumeBtn" data-reprise="0">Reprendre mon trajet</button>
+          <div class="duration-picker compact" id="homeDuration" role="group" aria-label="Durée de la séance">
+            <button data-min="10">10 min</button>
+            <button data-min="20" class="active">20 min</button>
+            <button data-min="30">30 min</button>
+            <button data-min="45">45 min</button>
+            <button data-min="60">60 min</button>
+          </div>
+          <p class="safety-line">Lance ta séance à l'arrêt. Ensuite, pose le téléphone.</p>
         </div>
+
+        <div class="stat-row">
+          <article><strong id="statLessons">0/35</strong><span>leçons</span></article>
+          <article><strong id="statSolid">0</strong><span>expressions solides</span></article>
+          <article><strong id="statTime">0 min</strong><span>d'écoute</span></article>
+          <article><strong id="statStreak">0 j</strong><span>de suite</span></article>
+        </div>
+
+        <div class="panel review-panel">
+          <div>
+            <b><span id="homeDue">0</span> <span id="homeDueLabel">expressions à revoir aujourd'hui</span></b>
+            <small>La mémoire fixe mieux quand on revoit au bon moment.</small>
+          </div>
+          <button class="secondary" id="homeReviewBtn" hidden>Réviser</button>
+        </div>
+
+        <p class="kicker section-kicker">AUTRES SÉANCES</p>
+        <div class="quick-row" id="homeQuick"></div>
+
       </section>
 
       <section class="view" id="view-learn" data-view="learn" hidden aria-hidden="true">
@@ -167,7 +174,8 @@
           <article class="panel voice-panel">
             <div class="card-head"><div><p class="kicker">TEST RAPIDE</p><h3>Dis « Moien »</h3></div><span class="status-pill" id="speechEngineBadge">non testé</span></div>
             <p class="muted">L'app teste d'abord le moteur cloud s'il est configuré, puis la reconnaissance du navigateur. Si aucun moteur n'est fiable, elle te le dit clairement.</p>
-            <button class="primary big full" id="voiceTestBtn">Tester maintenant</button>
+            <span class="badge" id="voiceTestBadge" data-etat="warn">non testé</span>
+          <button class="primary big full" id="voiceTestBtn">Tester maintenant</button>
             <div class="voice-result" id="voiceTestResult">Aucun test lancé.</div>
           </article>
           <article class="panel">
@@ -198,6 +206,17 @@
           <h3>Appareil utilisé</h3>
           <select id="micSelect" aria-label="Choix du microphone"><option value="">Micro par défaut de l'appareil</option></select>
           <p class="muted small">En Bluetooth mains libres, la voiture impose souvent un micro basse qualité. Si la reconnaissance se dégrade nettement en roulant, essaie le micro du téléphone.</p>
+        </div>
+      
+        <div class="panel">
+          <p class="kicker">COMMANDES VOCALES</p>
+          <h3>Piloter sans toucher l'écran</h3>
+          <label class="switch">
+            <input type="checkbox" id="commandesToggle">
+            <span>Activer les commandes vocales pendant la séance</span>
+          </label>
+          <p class="muted small" id="commandesVocalesEtat" data-etat="warn">Vérification…</p>
+          <p class="muted small">Sur iPhone, les boutons du volant et de l'autoradio pilotent la séance : lecture, pause, piste suivante pour passer, piste précédente pour répéter.</p>
         </div>
       </section>
 
@@ -233,6 +252,8 @@
           <article class="panel"><div class="card-head"><div><p class="kicker">APPLICATION</p><h3>Installation et mise à jour</h3></div></div><div class="row-actions"><button class="secondary" id="installBtnAccount">Installer</button><button class="secondary" id="updateBtn">Chercher une mise à jour</button></div><p class="microcopy" id="installHelp"></p></article>
           <article class="panel legal-panel"><div class="card-head"><div><p class="kicker">LÉGAL</p><h3>Avant commercialisation</h3></div></div><p class="muted">Les pages juridiques fournies sont des modèles de travail. Elles doivent être complétées avec l'identité réelle de l'entreprise et validées avant mise en vente.</p><div class="legal-links"><a href="legal.html">Mentions légales</a><a href="privacy.html">Confidentialité</a><a href="terms.html">Conditions d'abonnement</a></div></article>
         </div>
+      
+        <p class="muted small version-line">LULU Trajet version <b id="appVersionLabel">5.1.0</b></p>
       </section>
     </main>
 
@@ -265,11 +286,11 @@
       <div class="verdict-badge" id="sessionVerdict" hidden role="status" aria-live="polite"></div>
       <div class="mic-level" id="micLevel" aria-hidden="true"><i></i></div>
       <div class="session-feedback" id="sessionFeedback" hidden>
-        <p class="feedback-hint">Je n'ai pas pu vérifier. Tu peux le dire toi-même, ou ne rien faire.</p>
-        <button data-self="hard">À retravailler</button><button data-self="ok">Je l'ai bien dit</button><button data-self="easy">Facile</button>
+        <p class="feedback-hint">Tu viens d'entendre le modèle et ta voix. Comment c'était ?</p>
+        <button data-self="hard">À retravailler</button><button data-self="ok">Bien</button><button data-self="easy">Facile</button>
       </div>
     </div>
-    <div class="session-bottom"><button id="sessionRepeatBtn">↺ Répéter</button><button id="sessionSkipBtn">Suivant →</button></div>
+    <div class="session-bottom"><button class="drive-btn" id="sessionRepeatBtn">↺ Répéter</button><button class="drive-btn" id="sessionSkipBtn">Suivant →</button></div>
   </div>
 
   <div class="modal-backdrop" id="mergeModal" hidden>
@@ -285,9 +306,9 @@
     </div>
   </div>
 
-  <script src="config.js?v=5.0.0"></script>
-  <script src="cours.js?v=5.0.0"></script>
-  <script type="module" src="src/app.js?v=5.0.0"></script>
+  <script src="config.js?v=5.1.0"></script>
+  <script src="cours.js?v=5.1.0"></script>
+  <script type="module" src="src/app.js?v=5.1.0"></script>
   <noscript><p style="padding:24px;color:#eef5f8">Cette application a besoin de JavaScript.</p></noscript>
 </body>
 </html>

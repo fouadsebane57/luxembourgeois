@@ -24,33 +24,39 @@ export const VERDICT = {
   INCERTAIN: "reconnaissance_incertaine",
   AUCUNE_PAROLE: "aucune_parole",
   MICRO: "micro_indisponible",
-  SERVICE: "service_indisponible"
+  SERVICE: "service_indisponible",
+  // Mode autonome : aucun moteur de transcription, mais l'application
+  // a bien entendu une tentative. Elle le dit sans prétendre juger la
+  // prononciation, puis fait comparer le modèle et l'enregistrement.
+  AUTONOME: "compare_toi_meme"
 };
 
 /** Effet sur la progression. `none` = aucun écrit, la donnée est ignorée. */
 export const EFFET = { UP_STRONG: "up_strong", UP: "up", HOLD: "hold", DOWN: "down", NONE: "none" };
 
 export const LIBELLE = {
-  [VERDICT.CORRECT]: "Correct",
-  [VERDICT.PROBABLE]: "Probablement correct",
-  [VERDICT.PROCHE]: "Réponse proche",
-  [VERDICT.RETRAVAILLER]: "À retravailler",
+  [VERDICT.CORRECT]: "Excellent",
+  [VERDICT.PROBABLE]: "Bien",
+  [VERDICT.PROCHE]: "Presque",
+  [VERDICT.RETRAVAILLER]: "À réessayer",
   [VERDICT.INCERTAIN]: "Reconnaissance incertaine",
   [VERDICT.AUCUNE_PAROLE]: "Aucune parole détectée",
   [VERDICT.MICRO]: "Micro indisponible",
-  [VERDICT.SERVICE]: "Service vocal indisponible"
+  [VERDICT.SERVICE]: "Service vocal indisponible",
+  [VERDICT.AUTONOME]: "Compare avec le modèle"
 };
 
 /** Message affiché et dit à l'utilisateur. Aucun message culpabilisant sur une panne. */
 export const MESSAGE = {
-  [VERDICT.CORRECT]: "Très bien.",
-  [VERDICT.PROBABLE]: "C'est bon. Écoute le modèle pour confirmer.",
+  [VERDICT.CORRECT]: "Excellent.",
+  [VERDICT.PROBABLE]: "Bien. Écoute le modèle pour confirmer.",
   [VERDICT.PROCHE]: "Presque. Écoute la différence.",
-  [VERDICT.RETRAVAILLER]: "On reprend celle-ci. Écoute et répète.",
+  [VERDICT.RETRAVAILLER]: "On réessaie. Écoute et répète.",
   [VERDICT.INCERTAIN]: "Je n'ai pas pu vérifier. Ta progression n'est pas touchée.",
   [VERDICT.AUCUNE_PAROLE]: "Je n'ai rien entendu. Ta progression n'est pas touchée.",
   [VERDICT.MICRO]: "Le micro n'est pas disponible. Ta progression n'est pas touchée.",
-  [VERDICT.SERVICE]: "Le service vocal ne répond pas. Ta progression n'est pas touchée."
+  [VERDICT.SERVICE]: "Le service vocal ne répond pas. Ta progression n'est pas touchée.",
+  [VERDICT.AUTONOME]: "Écoute le modèle, puis ta voix."
 };
 
 /** Seuil de validation, fonction de la longueur en caractères. */
@@ -133,6 +139,13 @@ export function verdictDe(r) {
 
   if (r.errorKind === "mic") return nul(VERDICT.MICRO);
   if (!r.speechDetected || r.speechMs < 180) return nul(VERDICT.AUCUNE_PAROLE);
+
+  // Mode autonome. La parole a été entendue et mesurée localement.
+  // Aucun moteur ne peut confirmer les mots, donc aucun écrit
+  // automatique : c'est l'auto-évaluation qui fait avancer, après
+  // écoute du modèle puis de sa propre voix.
+  if (r.engine === "local") return nul(VERDICT.AUTONOME);
+
   if (r.engine === "echo" || r.engine === "none") return nul(VERDICT.SERVICE);
   if (r.errorKind === "service" && !r.match?.texte) return nul(VERDICT.SERVICE);
   if (!r.match || !r.match.texte) return nul(VERDICT.INCERTAIN);

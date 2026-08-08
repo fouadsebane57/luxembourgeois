@@ -1,5 +1,198 @@
 # CHANGELOG
 
+## 5.1.0 · 8 août 2026 · LULU Trajet
+
+Changement de nom, nouvelle identité, écran d'accueil avec reprise, et
+surtout deux pannes réelles corrigées, mesurées sur l'iPhone de
+l'utilisateur.
+
+### Cause n°1 · La reconnaissance cloud était réellement non configurée
+
+Le fichier `config.js` déployé sur GitHub était celui de la version 4 :
+`supabaseUrl`, `supabaseAnonKey` et `functionsBaseUrl` valaient chacun
+la chaîne vide, et `appVersion` valait encore `4.0.0`. Les valeurs
+avaient été saisies dans `config.example.js`, jamais renommé.
+
+L'application avait donc raison. Elle était simplement incapable de le
+dire utilement. Corrections :
+
+- nouveau module `src/core/config.js` qui contrôle chaque champ,
+  distingue une valeur vide d'un format inattendu, et affiche lequel,
+- le diagnostic nomme désormais le champ fautif, pas seulement
+  « non configurée dans config.js »,
+- `config.example.js` porte un mode d'emploi en tête et indique
+  explicitement où trouver la clé et comment renommer le fichier,
+- `docs/CONFIGURER.md` reprend la procédure clic par clic.
+
+### Cause n°2 · Le moteur audio d'iOS n'était jamais attendu
+
+Sur iPhone, un `AudioContext` naît suspendu. La 5.0.0 appelait
+`resume()` sans attendre le résultat. L'analyseur lisait donc du zéro,
+la mesure partait vers moins l'infini, et le plancher adaptatif de la
+détection de parole s'effondrait.
+
+Valeurs relevées sur l'appareil de l'utilisateur, toutes physiquement
+impossibles :
+
+| Affiché | Plafond réel |
+|---|---|
+| bruit ambiant -150 dB | -100 dB |
+| seuil de détection -527 dB | -58 dB |
+| signal sur bruit 514 dB | 70 dB |
+| 2520 ms de parole | sur du silence |
+
+Le seuil étant absurde, tout le dépassait. La détection annonçait de la
+parole sur du vide, l'enregistrement ne contenait rien, et la
+comparaison n'avait rien à comparer. Corrections :
+
+- `reveiller()` attend réellement l'état `running` avant toute mesure,
+- la mesure en décibels est bornée entre -100 et 0, sans exception,
+- le plancher de bruit reste dans un intervalle fixé par profil,
+- le seuil ne descend jamais sous une valeur absolue,
+- un pic sous -55 dBFS n'est jamais déclaré comme de la parole,
+- une mesure obtenue moteur audio endormi est signalée non fiable et
+  n'alimente aucune décision.
+
+### Cause n°3 · La reconnaissance de secours se heurtait au micro
+
+Sur iPhone, `Temps écoulé` systématique. La reconnaissance du navigateur
+était lancée alors que le flux micro de l'exercice était encore ouvert.
+Sur iOS, elle ne peut pas s'en emparer. Le micro est désormais libéré
+avant l'appel.
+
+### Mode autonome · l'application fonctionne enfin sans serveur
+
+Défaut majeur de la 5.0.0, corrigé ici. Sans `config.js` valide et sans
+Edge Function déployée, la boucle « écoute, répète, retour » était
+morte : l'application se contentait d'annoncer une panne.
+
+Elle dispose désormais d'une analyse locale, sans réseau, sans compte,
+sans configuration.
+
+Ce qu'elle mesure réellement :
+l'utilisateur a-t-il parlé, pendant combien de temps, avec combien de
+groupes d'énergie, à quel débit. Le nombre de syllabes attendu est
+déduit du guide de prononciation déjà présent dans les données, et
+ajouté au fichier de contenu sous le champ `syl`. Il est mesurable pour
+247 des 255 expressions ; les 8 restantes sont explicitement écartées
+plutôt que mal jugées.
+
+Ce qu'elle ne mesure pas, et ne prétend jamais mesurer :
+les phonèmes, l'accent, la justesse. « fënnef » et « bébé » ont deux
+syllabes et sont indiscernables par cette méthode. Un test le vérifie
+et le documente.
+
+Conséquence assumée : en mode autonome, **rien ne s'écrit
+automatiquement dans la progression**. La séance joue le modèle, rejoue
+l'enregistrement de l'utilisateur, puis lui demande de juger. C'est le
+fonctionnement des méthodes orales éprouvées, et c'est honnête.
+
+Nouveau mode `Écoute et répète`, annoncé comme fonctionnant hors ligne.
+Le diagnostic affiche `Mode autonome · actif` comme un état sain, pas
+comme un pis-aller.
+
+Neuf tests supplémentaires, dont un intitulé « limite assumée » qui fixe
+noir sur blanc ce que la méthode ne sait pas faire.
+
+### Diagnostics
+
+Fin des « À régler » muets. Quatorze causes distinctes, chacune avec un
+titre, une explication et l'action exacte à faire :
+
+configuration absente, configuration incomplète, compte requis, fonction
+serveur introuvable, requête bloquée par le navigateur, serveur
+injoignable, authentification refusée, quota atteint, erreur serveur,
+format audio refusé, enregistrement trop long, délai dépassé,
+transcription vide, aucun moteur disponible.
+
+Le code HTTP seul ne suffisant pas, la traduction tient compte du corps
+de la réponse : un quota renvoyé en 403 n'est plus confondu avec un refus
+d'authentification.
+
+### Identité
+
+- Nom `LULU Trajet` partout : interface, manifeste, pages légales,
+  documentation, titres, métadonnées, messages.
+- Nouveau logo : voiture de profil sous trois arcs aux couleurs du
+  drapeau luxembourgeois, redressés en ondes sonores. Testé à 48 pixels.
+- Icônes 192, 512, 180 pour iPhone, 32, plus deux versions maskable
+  pour Android.
+- Clés de stockage `lulu:v5`. L'ancienne `letz:v5` est reprise
+  automatiquement, aucune progression perdue.
+
+### Écran d'accueil et reprise
+
+- Salutation selon l'heure, en luxembourgeois le matin et le soir.
+- Anneau de progression, leçons terminées, expressions solides, temps
+  d'écoute, jours consécutifs.
+- Bouton unique et très large : `Reprendre mon trajet`.
+- La position est mémorisée **après chaque exercice**. Une fermeture
+  brutale, un appel entrant ou une batterie vide ne fait donc perdre au
+  maximum qu'un exercice.
+- L'application ne recommence jamais au début quand une progression
+  existe.
+- La position la plus récente gagne lors d'une synchronisation entre
+  deux appareils.
+
+### Mode voiture
+
+- Cibles tactiles de 64 pixels minimum, deux colonnes sur téléphone.
+- Boutons du volant et de l'autoradio via la Media Session : lecture,
+  pause, piste suivante pour passer, piste précédente pour répéter.
+- Commandes vocales `Répète`, `Suivant`, `Précédent`, `Pause`,
+  `Continue`, désactivées par défaut et **volontairement indisponibles
+  sur iPhone**. La reconnaissance continue y exige un geste utilisateur
+  à chaque relance et bloque le micro de l'exercice. L'application le dit
+  au lieu de faire semblant.
+
+### Synthèse vocale
+
+Recherche par ordre de préférence : `lb-LU`, puis `de-LU`, puis allemand
+standard, puis néerlandais. La voix réellement utilisée est nommée dans
+le diagnostic, avec son niveau de fidélité. Aucune promesse de voix
+luxembourgeoise quand il n'y en a pas.
+
+### Retours de prononciation
+
+Quatre niveaux lisibles : `Excellent`, `Bien`, `Presque`,
+`À réessayer`. Les quatre états techniques restants n'écrivent toujours
+rien dans la progression.
+
+### Service worker
+
+- `config.js` n'est **jamais** mis en cache. Une configuration périmée
+  rend tout diagnostic impossible ; c'est exactement ce qui empêchait de
+  voir l'effet d'une correction sur iPhone.
+- Chargement initial avec `cache: reload`, pour ne jamais reprendre une
+  copie intermédiaire du navigateur.
+- Nom de cache versionné, purge complète à l'activation.
+- Les onglets ouverts sont prévenus qu'une nouvelle version est active.
+
+### Tests
+
+72 tests, aucun échec. Vingt-cinq ajoutés dans cette version :
+
+- le plancher de bruit ne peut plus s'effondrer,
+- la mesure en décibels est bornée des deux côtés,
+- un pic trop faible n'est jamais de la parole,
+- un rapport signal sur bruit de 514 dB est impossible,
+- trois valeurs de configuration vides sont détectées et nommées,
+- une valeur vide se distingue d'un format inattendu,
+- le rapport de diagnostic ne révèle jamais une clé entière,
+- chaque cause d'échec porte un titre, un message et une action,
+- les codes HTTP donnent des causes distinctes,
+- un quota en 403 n'est pas confondu avec un refus d'authentification.
+
+### Connu et non résolu
+
+- Sur iPhone, la synthèse vocale s'arrête écran verrouillé. La solution
+  durable est l'audio pré-enregistré, prévue après cette version.
+- `lb-LU` sur `chirp_3` reste annoncé en Preview par Google.
+- Les 255 expressions portent toujours `st: "unverified"`. Aucune n'a été
+  validée par un locuteur natif. Bloquant avant commercialisation.
+- Stripe n'est pas implémenté.
+- Le contenu reste servi en clair dans `cours.js`.
+
 ## 5.0.0 · 7 août 2026 · Correctifs P0 et refonte du moteur vocal
 
 Lot centré sur la fiabilité. Aucun contenu luxembourgeois ajouté, modifié ou

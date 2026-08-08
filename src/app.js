@@ -1,6 +1,7 @@
 /* ===================================================================
-   LËTZEBUERGESCH AM AUTO · v5.0.0
-   Point d'entrée. Modules ES natifs, aucun outil de construction requis.
+   LULU TRAJET · v5.1.0
+   Apprendre le luxembourgeois en audio pendant les trajets.
+   Point d'entrée. Modules ES natifs, aucun outil de construction.
    =================================================================== */
 
 import * as C from "./core/content.js";
@@ -11,16 +12,17 @@ import * as Mig from "./core/migrate.js";
 import * as Voix from "./audio/tts.js";
 import * as Micro from "./audio/mic.js";
 import * as Rec from "./audio/recorder.js";
-import { reveiller } from "./audio/vad.js";
+
 import * as Moteur from "./speech/engine.js";
 import { VERDICT, EFFET, LIBELLE, MESSAGE } from "./speech/score.js";
 import * as SB from "./data/supabase.js";
 import * as Sync from "./data/sync.js";
 import { rendre, toast, $, $$, echapper, ouvrirModale, fermerModale } from "./ui/render.js";
 import { brancherDiagnostic, lancerTestMicro } from "./ui/diagnostic.js";
+import * as Commandes from "./ui/commandes.js";
+import * as Cfg from "./core/config.js";
 
-const CFG = window.LETZ_CONFIG || {};
-export const VERSION = CFG.appVersion || "5.0.0";
+export const VERSION = Cfg.version();
 
 /* ---------- état d'exécution ---------- */
 let route = "home";
@@ -38,11 +40,12 @@ export const seanceActive = () => seance;
 export const droitsActuels = () => droits;
 
 const MODES = [
-  { id: "smart",    icone: "✦",   titre: "Trajet intelligent", desc: "Nouveaux mots, rappels et oral selon ta progression.", meta: "recommandé", premium: false },
+  { id: "smart",    icone: "🚗",  titre: "Mode voiture",       desc: "Écoute et répète, sans toucher l'écran. Français, luxembourgeois, ta réponse.", meta: "recommandé", premium: false },
   { id: "review",   icone: "↺",   titre: "Révisions",          desc: "Reprend uniquement ce qui arrive à échéance.",         meta: "mémoire",    premium: false },
   { id: "sprint",   icone: "⚡",  titre: "Sprint oral",        desc: "Réponses rapides en luxembourgeois, sans lire.",       meta: "5 min",      premium: false },
   { id: "numbers",  icone: "123", titre: "Chiffres",           desc: "Automatise les nombres dans un ordre imprévisible.",   meta: "rapide",     premium: false },
   { id: "listen",   icone: "♫",   titre: "Écoute libre",       desc: "Aucune pression. Écoute et laisse la langue rentrer.", meta: "fatigue",    premium: false },
+  { id: "repeat",   icone: "◉",   titre: "Écoute et répète",   desc: "Fonctionne partout, même sans réseau ni compte. Le modèle, ta voix, tu compares.", meta: "hors ligne", premium: false },
   { id: "dialogue", icone: "◫",   titre: "Dialogues",          desc: "Conversations à deux voix avec traduction.",           meta: "premium",    premium: true },
   { id: "mistakes", icone: "◎",   titre: "Mes erreurs",        desc: "Reprend tes fragilités les plus fréquentes.",          meta: "premium",    premium: true }
 ];
@@ -70,7 +73,7 @@ function verifierLecon(li) {
 
 /* ---------- verrouillage Premium ---------- */
 export function leconVerrouillee(li) {
-  const limite = CFG.free?.lessons ?? 8;
+  const limite = Cfg.gratuit().lessons ?? 8;
   return !estPremium() && li >= limite;
 }
 
@@ -96,7 +99,7 @@ export async function demarrerMode(mode, leconForcee = null) {
   const def = MODES.find((m) => m.id === mode);
   if (def?.premium && !estPremium()) { allerA("premium"); toast("Ce mode fait partie de Premium."); return; }
 
-  const maxGratuit = Number(CFG.free?.maxSessionMinutes || 20);
+  const maxGratuit = Number(Cfg.gratuit().maxSessionMinutes || 20);
   let duree = Number(S.state().settings.duration || 20);
   if (!estPremium() && duree > maxGratuit) {
     duree = maxGratuit;
@@ -104,7 +107,9 @@ export async function demarrerMode(mode, leconForcee = null) {
     toast(`La formule Découverte est limitée à ${maxGratuit} minutes par séance.`);
   }
 
-  reveiller();                 // iOS exige un geste utilisateur pour l'audio
+  // Nous sommes dans un geste utilisateur : c'est le seul moment où
+  // iOS accepte de démarrer le moteur audio. On l'attend vraiment.
+  await Micro.reveiller();
   await Voix.preparer();
 
   const s = Sess.creerSeance({
@@ -127,6 +132,7 @@ export async function demarrerMode(mode, leconForcee = null) {
   $("sessionPauseBtn").textContent = "Pause";
   Sess.demarrer(seance);
   activerMediaSession();
+  demarrerCommandesVocales();
   await boucleSeance(jetonSeance);
 }
 
@@ -141,13 +147,27 @@ async function boucleSeance(jeton) {
     else await jouerExercice(ex, jeton);
     if (!seance || jeton !== jetonSeance) return;
     Sess.terminerExercice(seance, ex, Date.now() - t0);
+
+    // Position mémorisée après CHAQUE exercice. Une fermeture brutale de
+    // l'application, un appel entrant ou une batterie vide ne fait donc
+    // jamais perdre plus d'un exercice.
+    const it = ex.it || null;
+    S.noterPosition({
+      mode: seance.mode,
+      lecon: it ? it.lesson : leconCourante(),
+      lid: it ? it.lid : "",
+      itemId: it ? it.id : "",
+      position: seance.index,
+      seanceMinutes: Math.round(seance.cibleMs / 60000),
+      terminee: false
+    });
   }
   if (seance && jeton === jetonSeance) cloturer();
 }
 
 function majBandeau() {
   if (!seance) return;
-  const noms = { smart: "Trajet intelligent", review: "Révisions", sprint: "Sprint oral", numbers: "Chiffres", listen: "Écoute libre", dialogue: "Dialogue", mistakes: "Mes erreurs" };
+  const noms = { smart: "Mode voiture", repeat: "Écoute et répète", review: "Révisions", sprint: "Sprint oral", numbers: "Chiffres", listen: "Écoute libre", dialogue: "Dialogue", mistakes: "Mes erreurs" };
   const restant = Math.ceil(Sess.restantMs(seance) / 60000);
   $("sessionModeLabel").textContent = noms[seance.mode] || "Séance";
   $("sessionCounter").textContent = `${restant} min restantes`;
@@ -222,7 +242,8 @@ async function jouerExercice(ex, jeton) {
   afficher({
     phase: LIBELLE[r.verdict],
     prompt: it.lb, phonetique: it.ph, traduction: it.fr,
-    entendu: r.match?.texte || "", verdict: r.verdict
+    entendu: r.engine === "local" ? (r.detailRythme || "") : (r.match?.texte || ""),
+    verdict: r.verdict
   });
 
   // Écriture de la progression. Un effet NONE n'écrit rien du tout.
@@ -231,21 +252,34 @@ async function jouerExercice(ex, jeton) {
     verifierLecon(it.lesson);
   }
 
-  await Voix.dire(MESSAGE[r.verdict], "fr");
-  if (!vivant()) return;
-
-  if (r.verdict !== VERDICT.CORRECT) {
-    await Voix.dire(it.lb, "lb", 0.85);
+  // Mode autonome : le rythme d'abord, s'il y a quelque chose à dire,
+  // puis le modèle, puis sa propre voix. C'est la comparaison directe
+  // qui apprend, pas la note.
+  if (r.engine === "local") {
+    if (r.messageRythme) await Voix.dire(r.messageRythme, "fr");
+    else await Voix.dire("Écoute le modèle, puis ta voix.", "fr");
     if (!vivant()) return;
-    // Écho : entendre sa propre voix juste après le modèle est le meilleur
-    // moyen de savoir si le problème vient de la prononciation ou du micro.
-    if (S.state().settings.echo && r.blob) await Rec.lireBlob(r.blob);
+    await Voix.dire(it.lb, "lb", 0.8);
+    if (!vivant()) return;
+    if (r.blob) await Rec.lireBlob(r.blob);
+    if (!vivant()) return;
+    await Voix.dire(it.lb, "lb", 0.9);
+  } else {
+    await Voix.dire(MESSAGE[r.verdict], "fr");
+    if (!vivant()) return;
+    if (r.verdict !== VERDICT.CORRECT) {
+      await Voix.dire(it.lb, "lb", 0.85);
+      if (!vivant()) return;
+      // Entendre sa propre voix juste après le modèle est le meilleur
+      // moyen de distinguer un problème de prononciation d'un problème de micro.
+      if (S.state().settings.echo && r.blob) await Rec.lireBlob(r.blob);
+    }
   }
 
   // Auto-évaluation proposée uniquement quand le système n'a pas pu trancher,
   // et jamais bloquante. La séance continue seule si personne ne touche l'écran.
   if (r.effet === EFFET.NONE && r.verdict !== VERDICT.MICRO) {
-    const choix = await demanderAutoEvaluation(jeton, 8000);
+    const choix = await demanderAutoEvaluation(jeton, r.engine === "local" ? 9000 : 8000);
     if (choix && vivant()) {
       S.enregistrerResultat(it.id, choix, "production", { fiable: false });
       verifierLecon(it.lesson);
@@ -305,6 +339,7 @@ function cloturer() {
   const hier = new Date(jour - Sched.JOUR).toLocaleDateString("fr-FR");
   if (j.last !== auj) j.streak = j.last === hier ? (j.streak || 0) + 1 : 1;
   j.last = auj;
+  S.noterPosition({ terminee: true, position: 0 });
   S.sauver();
 
   afficher({
@@ -320,7 +355,20 @@ function cloturer() {
   setTimeout(() => { if (seance === s) { arreterSeance(); allerA("home"); } }, 3800);
 }
 
+function demarrerCommandesVocales() {
+  if (!S.state().settings.commandesVocales) return;
+  const sup = Commandes.supporte();
+  if (!sup.ok) return;   // jamais de fausse promesse : voir ui/commandes.js
+  Commandes.demarrer((cmd) => {
+    if (cmd === "repeter") repeter();
+    else if (cmd === "suivant") passerExercice();
+    else if (cmd === "pause") basculerPause(true);
+    else if (cmd === "continue") basculerPause(false);
+  });
+}
+
 export function arreterSeance() {
+  Commandes.arreter();
   jetonSeance++;
   seance = null;
   enPause = false;
@@ -338,8 +386,8 @@ function activerMediaSession() {
   if (!("mediaSession" in navigator)) return;
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: "Séance de luxembourgeois",
-      artist: "Lëtzebuergesch am Auto",
+      title: "LULU Trajet · séance",
+      artist: "LULU Trajet",
       artwork: [{ src: "icon-512.png", sizes: "512x512", type: "image/png" }]
     });
     navigator.mediaSession.setActionHandler("play", () => basculerPause(false));
@@ -374,6 +422,20 @@ export function passerExercice() {
   if (!seance) return;
   Voix.stopper();
   if (resolutionAuto) { const r = resolutionAuto; resolutionAuto = null; $("sessionFeedback").hidden = true; r(null); }
+}
+
+/**
+ * Reprend exactement là où l'utilisateur s'était arrêté.
+ * Si aucune séance n'a été interrompue, on démarre le Mode voiture
+ * sur la leçon courante. On ne recommence JAMAIS au début quand une
+ * progression existe.
+ */
+export async function reprendre() {
+  const r = S.reprise();
+  if (!S.aReprendre()) return demarrerMode("smart");
+  if (r.seanceMinutes) { S.state().settings.duration = r.seanceMinutes; S.sauver(false); }
+  const lecon = r.terminee ? leconCourante() : (r.lecon ?? leconCourante());
+  return demarrerMode(r.mode || "smart", lecon);
 }
 
 export function repeter() { Voix.repeter(); }
@@ -449,6 +511,12 @@ function brancherEvenements() {
 
   const on = (id, evt, fn) => { const el = $(id); if (el) el[evt] = fn; };
 
+  on("resumeBtn", "onclick", reprendre);
+  on("homeReviewBtn", "onclick", () => demarrerMode("review"));
+  on("homeDuration", "onclick", (e) => {
+    const b = e.target.closest("button[data-min]"); if (!b) return;
+    S.state().settings.duration = Number(b.dataset.min); S.sauver(); rendre();
+  });
   on("startSmartHome", "onclick", () => demarrerMode("smart"));
   on("durationPicker", "onclick", (e) => {
     const b = e.target.closest("button[data-min]"); if (!b) return;
@@ -481,6 +549,7 @@ function brancherEvenements() {
 
   on("dailyGoalSelect", "onchange", (e) => { S.state().settings.dailyGoal = Number(e.target.value); S.sauver(); rendre(); });
   on("memoryTipsToggle", "onchange", (e) => { S.state().settings.tips = e.target.checked; S.sauver(); });
+  on("commandesToggle", "onchange", (e) => { S.state().settings.commandesVocales = e.target.checked; S.sauver(); rendre(); });
   on("echoToggle", "onchange", (e) => { S.state().settings.echo = e.target.checked; S.sauver(); });
 
   on("exportProgressBtn", "onclick", exporterProgression);
@@ -505,7 +574,7 @@ function brancherEvenements() {
   on("exportAccountBtn", "onclick", async () => {
     const d = await SB.exporterDonnees();
     if (!d) return toast("Connecte-toi pour exporter tes données.");
-    telecharger(d, `letzebuergesch-donnees-${new Date().toISOString().slice(0, 10)}.json`);
+    telecharger(d, `lulu-donnees-${new Date().toISOString().slice(0, 10)}.json`);
   });
   on("deleteAccountBtn", "onclick", async () => {
     if (!confirm("Supprimer définitivement ton compte et toutes tes données serveur ?")) return;
@@ -575,7 +644,7 @@ export function ouvrirLecon(li) {
 }
 
 function exporterProgression() {
-  telecharger(S.instantane(), `letzebuergesch-progression-${new Date().toISOString().slice(0, 10)}.json`);
+  telecharger(S.instantane(), `lulu-progression-${new Date().toISOString().slice(0, 10)}.json`);
 }
 
 async function importerProgression(fichier) {
@@ -656,7 +725,7 @@ async function verifierMiseAJour() {
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export { lancerTestMicro, Voix, Micro, Rec, Moteur, S, C, Sched, SB, Sync, Mig };
+export { lancerTestMicro, Voix, Micro, Rec, Moteur, S, C, Sched, SB, Sync, Mig, Commandes, Cfg };
 
 // Le module de rendu a besoin de l'application. Les imports ES étant
 // hissés, ce branchement est effectif avant le premier appel à rendre().

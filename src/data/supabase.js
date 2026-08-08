@@ -32,7 +32,7 @@ export async function init() {
     const mod = await import("../vendor/supabase.esm.js");
     client = mod.createClient(CFG().supabaseUrl, CFG().supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" },
-      global: { headers: { "x-application-name": "letzebuergesch-am-auto" } }
+      global: { headers: { "x-application-name": "lulu-trajet" } }
     });
   } catch (err) {
     return { ok: false, raison: "Client Supabase introuvable: " + err.message };

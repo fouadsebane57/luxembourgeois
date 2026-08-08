@@ -12,7 +12,7 @@
    Le type MIME retenu est transmis au serveur et affiché au diagnostic.
    =================================================================== */
 
-import { ouvrir, infosFlux } from "./mic.js";
+import { ouvrir, infosFlux, reveiller } from "./mic.js";
 import { ecouter } from "./vad.js";
 
 export const DUREE_MAX_MS = 10000;   // plafond absolu envoyé au cloud
@@ -49,6 +49,9 @@ export async function capturer(opt = {}) {
   let flux;
   try {
     flux = await ouvrir();
+    // Le contexte audio doit tourner AVANT toute mesure. Sans cette
+    // attente, iOS renvoie du silence et la détection part en vrille.
+    await reveiller();
   } catch (err) {
     return { ok: false, errorKind: "mic", error: err.message, blob: null, vad: null };
   }
@@ -103,7 +106,8 @@ export async function capturer(opt = {}) {
   return {
     ok: !!blob && !trop && vad.speechDetected,
     errorKind: trop ? "service" : "none",
-    error: trop ? "Enregistrement trop volumineux, il n'a pas été envoyé." : "",
+    error: trop ? "Enregistrement trop volumineux, il n'a pas été envoyé."
+                : (vad.detail || ""),
     blob: trop ? null : blob,
     mimeType: rec.mimeType || mime || "",
     octets: blob?.size || 0,

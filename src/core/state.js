@@ -23,9 +23,23 @@ export const DEFAUTS = {
     micDeviceId: "",
     attenteMaxMs: 4500, paroleMaxMs: 9000,
     voiceRate: 0.85, luxVoice: "", frVoice: "",
-    tips: true, echo: true
+    tips: true, echo: true, commandesVocales: false
   },
   profile: { name: "Apprenant", email: "" },
+
+  // Reprise exacte. Sans ça, l'utilisateur recommence au début à chaque
+  // ouverture, ce qui est la plainte numéro un sur ce type d'application.
+  reprise: {
+    mode: "",            // dernier mode lancé
+    lecon: 0,            // index de leçon
+    lid: "",             // identifiant permanent de la leçon
+    itemId: "",          // identifiant permanent de la dernière expression
+    position: 0,         // rang dans la file de la séance
+    dateMs: 0,           // horodatage
+    seanceMinutes: 0,    // durée choisie
+    terminee: true       // false si la séance a été interrompue
+  },
+
   sync: { lastPushed: 0, lastPulled: 0, pending: false, deviceId: "" }
 };
 
@@ -100,11 +114,34 @@ export function enregistrerExposition(id) {
   return etat.progress[id];
 }
 
+/** Mémorise où l'utilisateur en est. Appelé après chaque exercice. */
+export function noterPosition({ mode, lecon, lid, itemId, position, seanceMinutes, terminee }) {
+  const r = etat.reprise;
+  if (mode !== undefined) r.mode = mode;
+  if (lecon !== undefined) r.lecon = lecon;
+  if (lid !== undefined) r.lid = lid;
+  if (itemId !== undefined) r.itemId = itemId;
+  if (position !== undefined) r.position = position;
+  if (seanceMinutes !== undefined) r.seanceMinutes = seanceMinutes;
+  if (terminee !== undefined) r.terminee = terminee;
+  r.dateMs = Date.now();
+  sauver();
+  return r;
+}
+
+export const reprise = () => etat.reprise;
+
+/** Y a-t-il quelque chose à reprendre ? */
+export function aReprendre() {
+  const r = etat.reprise;
+  return !!(r.dateMs && r.mode);
+}
+
 export function instantane() {
   return {
     schema: 5,
-    contentVersion: (window.LETZ_CONTENT || {}).contentVersion || "",
-    appVersion: (window.LETZ_CONFIG || {}).appVersion || "",
+    contentVersion: (window.LULU_CONTENT || window.LETZ_CONTENT || {}).contentVersion || "",
+    appVersion: (window.LULU_CONFIG || window.LETZ_CONFIG || {}).appVersion || "",
     updatedAt: new Date().toISOString(),
     deviceId: etat.sync.deviceId,
     progress: etat.progress,
@@ -112,7 +149,8 @@ export function instantane() {
     favorites: etat.favorites,
     journal: etat.journal,
     settings: etat.settings,
-    profile: etat.profile
+    profile: etat.profile,
+    reprise: etat.reprise
   };
 }
 
@@ -131,6 +169,9 @@ export function fusionnerDistant(distant) {
   etat.journal.minutes = Math.max(etat.journal.minutes || 0, j.minutes || 0);
   etat.journal.streak = Math.max(etat.journal.streak || 0, j.streak || 0);
   etat.journal.hist = { ...(j.hist || {}), ...(etat.journal.hist || {}) };
+  // La position de reprise la plus récente fait foi, quel que soit l'appareil.
+  const rd = distant.reprise;
+  if (rd?.dateMs && rd.dateMs > (etat.reprise.dateMs || 0)) etat.reprise = { ...etat.reprise, ...rd };
   etat.sync.lastPulled = Date.now();
   sauver(false);
   return { fusionnees, ajoutees };
@@ -139,6 +180,7 @@ export function fusionnerDistant(distant) {
 export function reinitialiserProgression() {
   etat.progress = {}; etat.validated = {}; etat.favorites = {};
   etat.journal = structuredClone(DEFAUTS.journal);
+  etat.reprise = structuredClone(DEFAUTS.reprise);
   sauver();
 }
 

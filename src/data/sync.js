@@ -11,7 +11,7 @@
 import * as sb from "./supabase.js";
 import { state, instantane, fusionnerDistant, sauver, brancherSync } from "../core/state.js";
 
-const CLE_FILE = "letz:v5:queue";
+const CLE_FILE = "lulu:v5:queue";
 let enCours = false;
 let dernierEchec = "";
 

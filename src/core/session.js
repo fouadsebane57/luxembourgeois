@@ -84,6 +84,12 @@ function construireFile({ mode, dus, solides, enCours, neufs, fragiles, items, d
     const pool = fragiles.length ? fragiles : [...dus, ...enCours];
     return melanger(pool).map((i) => ex(TYPES.ORAL, i));
   }
+  if (mode === "repeat") {
+    // Séance de répétition pure. Elle ne dépend d'aucun service :
+    // modèle, enregistrement, comparaison à l'oreille.
+    const socle = [...neufs, ...dus, ...enCours, ...leconItems];
+    return melanger(socle.length ? socle : items).map((i) => ex(TYPES.ORAL, i));
+  }
   if (mode === "review") {
     return melanger([...dus, ...enCours]).map((i) => ex(TYPES.ORAL, i));
   }

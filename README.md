@@ -1,108 +1,137 @@
-# Lëtzebuergesch am Auto · v5.0.0
+# LULU Trajet · 5.1.0
 
-Apprentissage oral du luxembourgeois, conçu pour les trajets.
-
-Ce lot corrige les blocages P0 et refait entièrement la chaîne vocale.
-Aucun contenu luxembourgeois n'a été ajouté, modifié ou inventé.
-
-**Le contenu reste volontairement à 35 leçons et 255 expressions.**
-Une application orale avec 255 expressions et une reconnaissance qui fonctionne
-vaut mieux qu'une application avec 5 000 expressions qui comprend mal.
+Apprendre le luxembourgeois **en audio, pendant les trajets**.
+Écoute. Répète. Progresse. Le moins d'écran possible.
 
 ---
 
-## Par où commencer
+## À FAIRE EN PREMIER
 
-1. `docs/DEPLOIEMENT.md` : mise en ligne, une étape à la fois.
-2. `docs/PIPELINE_VOCAL.md` : pourquoi le micro échouait, chiffres à l'appui.
-3. `docs/TESTS_TERRAIN.md` : protocole de tests sur téléphone et en voiture.
-4. `docs/ROLLBACK.md` : retour arrière, trois niveaux.
-5. `CHANGELOG.md` : tout ce qui change.
+Ta reconnaissance vocale ne marchait pas parce que `config.js` contenait
+trois valeurs vides. Ouvre **`docs/CONFIGURER.md`** et suis les sept
+étapes, clic par clic. C'est le seul document nécessaire pour la remettre
+en marche.
 
-**Ne remplace pas ton `config.js` par celui du ZIP.**
-Recopie tes trois valeurs Supabase dans `config.example.js`, puis renomme-le.
+Ensuite, `docs/TEST_IPHONE.md` pour vérifier sur ton téléphone.
+
+---
+
+## Les autres documents
+
+| Fichier | À quoi il sert |
+|---|---|
+| `docs/CONFIGURER.md` | remettre la reconnaissance vocale en marche |
+| `docs/TEST_IPHONE.md` | vérifier sur iPhone, case par case |
+| `docs/DEPLOIEMENT.md` | Supabase et Google Cloud, une étape à la fois |
+| `docs/PIPELINE_VOCAL.md` | comment fonctionne la chaîne audio |
+| `docs/ROLLBACK.md` | revenir en arrière, trois niveaux |
+| `CHANGELOG.md` | tout ce qui change dans cette version |
 
 ---
 
 ## Structure
 
 ```
-index.html              coquille, 8 vues
-config.example.js       modèle de configuration publique
-cours.js                contenu, identifiants permanents
-cours.legacy-map.json   table de migration des anciennes clés
-styles.css              feuille de style
-sw.js                   service worker
-manifest.webmanifest    manifeste PWA
+index.html                coquille, 8 vues
+config.example.js         modèle à remplir puis renommer en config.js
+cours.js                  contenu, identifiants permanents, table de migration
+cours.legacy-map.json     table de migration, copie de secours
+styles.css                feuille de style
+sw.js                     service worker, config.js jamais mis en cache
+manifest.webmanifest      manifeste PWA
+assets/logo.svg           source du logo
+icon-*.png                icônes générées
 
 src/
-  app.js                point d'entrée et orchestration
+  app.js                  orchestration, séance, reprise
   core/
-    content.js          accès au contenu par identifiant
-    state.js            état, sauvegarde, file de synchronisation
-    scheduler.js        répétition espacée à trois dimensions
-    session.js          moteur de séance piloté par le temps
-    migrate.js          migration des anciennes progressions
+    config.js             contrôle de la configuration, champ par champ
+    content.js            accès au contenu par identifiant
+    state.js              état, sauvegarde locale, position de reprise
+    scheduler.js          répétition espacée à trois dimensions
+    session.js            moteur de séance piloté par le temps
+    migrate.js            migration des anciennes progressions
   audio/
-    mic.js              permission, appareil, niveau, Bluetooth
-    vad.js              détection de parole, plancher de bruit adaptatif
-    recorder.js         enregistrement piloté par la détection
-    tts.js              synthèse vocale
+    mic.js                permission, appareil, moteur audio, niveau borné
+    vad.js                détection de parole, seuils bornés
+    recorder.js           enregistrement piloté par la détection
+    tts.js                synthèse vocale, recherche réelle de lb-LU
   speech/
-    normalize.js        normalisation adaptée au luxembourgeois
-    score.js            comparaison et verdict pédagogique
-    engine.js           orchestration du pipeline complet
+    normalize.js          normalisation adaptée au luxembourgeois
+    score.js              comparaison et verdict
+    engine.js             pipeline complet, causes d'échec précises
+    erreurs.js            quatorze causes, chacune avec son action
   data/
-    supabase.js         authentification, profil, droits, progression
-    sync.js             synchronisation, file hors ligne, conflits
+    supabase.js           comptes, droits, progression
+    sync.js               synchronisation, file hors ligne
   ui/
-    render.js           rendu de la vue active
-    diagnostic.js       diagnostic micro et mode test
+    render.js             rendu de la vue active
+    diagnostic.js         diagnostic détaillé et mode test
+    commandes.js          commandes vocales, avec limites iOS assumées
   vendor/
-    supabase.esm.js     client Supabase 2.112.2, local, pas de CDN
+    supabase.esm.js       client Supabase 2.112.2, local, sans CDN
 
 supabase/
-  schema.sql            tables, index, RLS, policies, triggers, quota
-  admin-outils.sql      Premium de test, suivi de consommation, contrôles
+  schema.sql              tables, RLS, déclencheurs, quota
+  admin-outils.sql        Premium de test, suivi de consommation
   functions/speech-transcribe/index.ts
   functions/delete-account/index.ts
 
-tests/                  47 tests de non-régression
-scripts/                génération des identifiants de contenu
-docs/                   déploiement, migration, rollback, tests
+tests/                    63 tests de non-régression
+scripts/                  génération des identifiants de contenu
 ```
 
-Modules ES natifs. Aucun outil de construction. Les fichiers se déposent tels
-quels sur GitHub Pages.
+Modules ES natifs. Aucun outil de construction. Les fichiers se déposent
+tels quels sur GitHub Pages.
 
 ---
 
-## Ce qui fonctionne sans backend
+## Ce qui fonctionne sans rien configurer
 
-PWA installable, 35 leçons, séances minutées, répétition espacée, lexique,
-favoris, statistiques, export et import, synthèse vocale, enregistrement,
-écho de sa propre voix, reconnaissance de secours, hors ligne, diagnostic.
+**La boucle complète d'apprentissage oral.** Le modèle est prononcé, tu
+répètes, l'application mesure ta tentative, rejoue le modèle, rejoue ta
+voix, et te laisse juger. Ta progression avance.
+
+Également : les 35 leçons, les séances minutées, la répétition espacée,
+le lexique, les favoris, les statistiques, la reprise exacte,
+l'enregistrement, le mode hors ligne, l'installation sur l'écran
+d'accueil, le diagnostic complet.
+
+### Ce que l'analyse locale mesure vraiment
+
+Elle compte les groupes d'énergie de ta voix et les compare au nombre de
+syllabes attendu, déduit du guide de prononciation. Elle sait donc dire
+si tu as parlé, combien de temps, et à quel rythme.
+
+Elle ne sait **pas** juger tes phonèmes. « fënnef » et « bébé » ont deux
+syllabes et lui paraissent identiques. C'est pourquoi elle n'écrit jamais
+seule dans ta progression : c'est ton propre jugement, après avoir
+entendu le modèle puis ta voix, qui fait avancer.
+
+Pour une vraie évaluation des mots prononcés, il faut la reconnaissance
+`lb-LU`, donc `docs/CONFIGURER.md` puis `docs/DEPLOIEMENT.md`.
 
 ## Ce qui nécessite Supabase
 
-Comptes, synchronisation multi-appareils, reconnaissance cloud `lb-LU`,
-droits Premium, export RGPD, suppression de compte.
+Les comptes, la synchronisation entre appareils, la reconnaissance
+luxembourgeoise `lb-LU`, les droits Premium, l'export et la suppression
+des données.
 
 ---
 
 ## Sécurité
 
-Ne jamais placer dans `config.js` ni sur GitHub :
+`config.js` est public. Il ne doit contenir que :
+l'adresse Supabase, la clé **publiable**, l'adresse des fonctions.
 
-- `sb_secret_...` ou la clé `service_role`
-- une clé secrète Stripe ou un secret de webhook
-- la clé privée du compte de service Google
+Ne jamais y mettre, ni sur GitHub :
+`sb_secret_`, `service_role`, une clé Stripe secrète, un secret de
+webhook, la clé privée du compte de service Google.
 
 Ces valeurs vont uniquement dans les secrets des Edge Functions.
-La clé publiable `sb_publishable_` est publique par conception, protégée par la RLS.
 
-Le statut Premium est décidé par le serveur. Modifier `localStorage` ne débloque
-plus rien.
+Le statut Premium est décidé par le serveur. Modifier le stockage local
+ne débloque rien.
 
 ---
 
@@ -112,44 +141,39 @@ plus rien.
 node --test "tests/*.test.mjs"
 ```
 
-47 tests. Ils couvrent les identifiants permanents, la migration, la
-normalisation luxembourgeoise, les seuils de comparaison, la règle selon
-laquelle une panne technique n'écrit jamais, et la durée réelle des séances.
+72 tests. Ils couvrent les identifiants permanents, la migration, la
+normalisation luxembourgeoise, les seuils de comparaison, la durée réelle
+des séances, les bornes de la mesure audio, le comptage syllabique,
+la détection d'une configuration incomplète, et la traduction des
+erreurs serveur en causes distinctes.
 
-Douze d'entre eux vérifient que l'application démarre réellement : contenu
-chargé, modules importés, vues rendues, migration effective, dégradation propre
-sans micro ni réseau. Ils nécessitent jsdom :
+Douze d'entre eux vérifient que l'application démarre réellement. Ils
+nécessitent jsdom :
 
 ```
 npm install --no-save jsdom
 node --test "tests/*.test.mjs"
 ```
 
-Sans jsdom, ces douze tests sont ignorés et les 35 autres tournent normalement.
-
-Régénérer les identifiants après modification du contenu :
-
-```
-node scripts/build-content-ids.mjs cours.js cours.js cours.legacy-map.json
-```
-
-Le script est idempotent. Il conserve les identifiants existants.
+Sans jsdom, ces douze sont ignorés et les 60 autres tournent.
 
 ---
 
 ## Limites assumées
 
-- **iOS écran verrouillé** : la synthèse vocale s'arrête. La promesse « pose le
-  téléphone » n'est pas encore tenue sur iPhone écran éteint.
-- **`lb-LU` sur `chirp_3`** : annoncé en Preview par Google au 7 août 2026, pas
-  en disponibilité générale. À revérifier avant mise en vente.
-- **Transcription et prononciation restent deux choses différentes.**
+- **iPhone écran verrouillé** : la synthèse vocale s'arrête. La promesse
+  « pose le téléphone » n'est donc pas tenue écran éteint. Garde l'écran
+  allumé, ou utilise un support alimenté.
+- **Commandes vocales indisponibles sur iPhone.** Volontaire. La
+  reconnaissance continue y est trop peu fiable et bloque le micro de
+  l'exercice. Les boutons du volant les remplacent.
+- **`lb-LU` sur `chirp_3`** : annoncé en Preview par Google, pas en
+  disponibilité générale.
+- **Transcription et prononciation sont deux choses différentes.**
   L'application ne prétend pas noter un accent.
-- **Aucune expression validée linguistiquement.** Le champ `st` vaut
-  `unverified` sur les 255 expressions. Bloquant avant commercialisation.
-- **Stripe non implémenté.** Volontaire, après stabilisation vocale.
-- **Contenu servi en clair** dans `cours.js`. Le verrou Premium sur les leçons
-  reste cosmétique tant que la distribution serveur n'existe pas.
+- **Aucune expression validée linguistiquement.** Les 255 portent
+  `st: "unverified"`. Bloquant avant commercialisation.
+- **Stripe non implémenté.**
 
 ---
 

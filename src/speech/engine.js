@@ -1,47 +1,71 @@
 /* ===================================================================
    PIPELINE VOCAL
 
-   micro -> niveau -> détection de parole -> enregistrement
-        -> STT luxembourgeois (cloud) -> normalisation
-        -> comparaison -> verdict pédagogique -> retour
+   micro -> réveil du contexte audio -> mesure -> détection de parole
+        -> enregistrement -> transcription lb-LU -> normalisation
+        -> comparaison -> verdict -> retour parlé
 
-   Chaque étape est tracée. La trace alimente le diagnostic et permet
-   de savoir si un échec vient du micro, du bruit, du transport,
-   du moteur de transcription ou de l'algorithme de comparaison.
+   Chaque étape porte une cause d'échec précise. Le diagnostic sait
+   donc distinguer une configuration absente, une fonction non
+   déployée, un blocage réseau, une authentification refusée, un quota,
+   une erreur serveur, un format refusé, un dépassement de délai et une
+   transcription vide.
 
-   Le navigateur n'est qu'un secours. Il ne connaît pas le luxembourgeois
-   et ne peut donc jamais faire baisser la progression.
+   Le navigateur reste un secours. Il ne connaît pas le luxembourgeois
+   et ne peut jamais faire baisser la progression.
    =================================================================== */
 
 import { capturer, blobEnBase64 } from "../audio/recorder.js";
+import { liberer, fluxOuvert } from "../audio/mic.js";
 import { compare, verdictDe, VERDICT, EFFET } from "./score.js";
+import { CAUSE, causeDeReponse, causeDException, texteComplet } from "./erreurs.js";
+import { analyser as analyserRythme, phrase as phraseRythme, detail as detailRythme } from "../audio/rythme.js";
+import * as Cfg from "../core/config.js";
 
-const CFG = () => window.LETZ_CONFIG || {};
+export const TIMEOUT_CLOUD_MS = 15000;
 
-export function cloudConfigure() {
-  const c = CFG();
-  return !!(c.functionsBaseUrl && c.supabaseUrl && c.supabaseAnonKey);
+/** État exact du moteur cloud, avec cause. */
+export function etatCloud(connecte) {
+  const v = Cfg.verifier();
+  if (!v.ok) return { pret: false, cause: v.cause, resume: v.resume, verif: v };
+  if (!connecte) return { pret: false, cause: CAUSE.NON_CONNECTE, resume: "Connecte-toi pour activer la reconnaissance luxembourgeoise.", verif: v };
+  return { pret: true, cause: CAUSE.OK, resume: "Prête, modèle chirp_3, région eu.", verif: v };
 }
 
-export function navigateurDisponible() {
-  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-}
+export const cloudConfigure = () => Cfg.verifier().ok;
+export const navigateurDisponible = () => !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
-/** Reconnaissance de secours. Langue de repli explicite, jamais présentée comme du lb. */
-export function reconnaissanceNavigateur(ms = 6000, lang = "de-DE") {
+/* ---------- Reconnaissance de secours, navigateur ---------- */
+
+/**
+ * Le micro doit être libéré avant l'appel : sur iOS, la reconnaissance
+ * du navigateur ne peut pas ouvrir le micro tant qu'un flux le retient.
+ * C'est la cause du « Temps écoulé » observé sur iPhone en 5.0.0.
+ */
+export async function reconnaissanceNavigateur(ms = 6000, lang = "de-DE") {
   const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Rec) return Promise.resolve({ engine: "browser", transcripts: [], error: "Reconnaissance navigateur indisponible.", latencyMs: 0 });
+  if (!Rec) {
+    return { engine: "browser", transcripts: [], cause: CAUSE.MOTEUR_ABSENT,
+             error: "Reconnaissance du navigateur indisponible.", latencyMs: 0, lang };
+  }
+  if (fluxOuvert()) await liberer();
+
+  const t0 = performance.now();
   return new Promise((resolve) => {
-    const t0 = performance.now();
     let rec, fini = false;
     const out = [];
-    const finir = (error = "") => {
+    const finir = (cause, error = "") => {
       if (fini) return;
       fini = true;
       try { rec?.stop(); } catch (_) {}
-      resolve({ engine: "browser", transcripts: out, error: out.length ? "" : error, latencyMs: Math.round(performance.now() - t0), lang });
+      resolve({
+        engine: "browser", transcripts: out,
+        cause: out.length ? CAUSE.OK : cause,
+        error: out.length ? "" : error,
+        latencyMs: Math.round(performance.now() - t0), lang
+      });
     };
-    try { rec = new Rec(); } catch (e) { return finir(e.message); }
+    try { rec = new Rec(); } catch (e) { return finir(CAUSE.MOTEUR_ABSENT, e.message); }
     rec.lang = lang;
     rec.interimResults = false;
     rec.maxAlternatives = 5;
@@ -51,96 +75,116 @@ export function reconnaissanceNavigateur(ms = 6000, lang = "de-DE") {
         const r = e.results[e.results.length - 1];
         for (let i = 0; i < r.length; i++) out.push({ text: r[i].transcript, confidence: r[i].confidence || 0 });
       } catch (_) {}
-      finir();
+      finir(CAUSE.OK);
     };
-    rec.onerror = (e) => finir(traduireErreurNavigateur(e.error));
-    rec.onend = () => finir("Aucune transcription retournée.");
-    try { rec.start(); } catch (e) { return finir(e.message); }
-    setTimeout(() => finir("Temps écoulé."), ms);
+    rec.onerror = (e) => finir(causeNavigateur(e.error), messageNavigateur(e.error));
+    rec.onend = () => finir(CAUSE.TRANSCRIPTION_VIDE, "Le navigateur n'a retourné aucun texte.");
+    try { rec.start(); }
+    catch (e) { return finir(CAUSE.MOTEUR_ABSENT, "Démarrage refusé : " + e.message); }
+    setTimeout(() => finir(CAUSE.TIMEOUT, "Le navigateur n'a pas répondu dans le délai."), ms);
   });
 }
 
-function traduireErreurNavigateur(code) {
-  const m = {
-    "no-speech": "Aucune parole détectée par le navigateur.",
-    "audio-capture": "Le navigateur n'a pas pu capter le micro.",
-    "not-allowed": "Autorisation micro refusée.",
-    "service-not-allowed": "Service de reconnaissance refusé par le navigateur.",
-    "network": "Le service de reconnaissance du navigateur est injoignable.",
-    "aborted": "Reconnaissance interrompue."
-  };
-  return m[code] || ("Erreur de reconnaissance: " + code);
-}
+const causeNavigateur = (c) => ({
+  "not-allowed": CAUSE.AUTH, "service-not-allowed": CAUSE.AUTH,
+  "network": CAUSE.RESEAU, "no-speech": CAUSE.TRANSCRIPTION_VIDE,
+  "audio-capture": CAUSE.MOTEUR_ABSENT
+}[c] || CAUSE.MOTEUR_ABSENT);
 
-/** Appel de l'Edge Function. Les secrets Google restent côté serveur. */
+const messageNavigateur = (c) => ({
+  "no-speech": "Le navigateur n'a entendu aucune parole.",
+  "audio-capture": "Le navigateur n'a pas pu accéder au micro. Une autre fonction le retient peut-être.",
+  "not-allowed": "Autorisation refusée pour la reconnaissance du navigateur.",
+  "service-not-allowed": "Le navigateur refuse d'utiliser son service de reconnaissance.",
+  "network": "Le service de reconnaissance du navigateur est injoignable.",
+  "aborted": "Reconnaissance interrompue."
+}[c] || ("Erreur de reconnaissance : " + c));
+
+/* ---------- Reconnaissance cloud ---------- */
+
 export async function reconnaissanceCloud({ blob, mimeType, expected, accepted, contexte, jeton }) {
-  const c = CFG();
   const t0 = performance.now();
-  if (!cloudConfigure()) {
-    return { engine: "cloud", transcripts: [], error: "Moteur cloud non configuré.", errorKind: "service", latencyMs: 0 };
-  }
+  const echec = (cause, error, extra = {}) => ({
+    engine: "cloud", transcripts: [], cause, error,
+    detail: texteComplet(cause, error),
+    latencyMs: Math.round(performance.now() - t0), ...extra
+  });
+
+  const v = Cfg.verifier();
+  if (!v.ok) return echec(v.cause, v.resume);
+  if (!jeton) return echec(CAUSE.NON_CONNECTE, "Aucune session active.");
+  if (!blob) return echec(CAUSE.TRANSCRIPTION_VIDE, "Aucun enregistrement à envoyer.");
+
+  const url = `${Cfg.functionsBaseUrl()}/speech-transcribe`;
   const controleur = new AbortController();
-  const minuteur = setTimeout(() => controleur.abort(), 12000);
+  const minuteur = setTimeout(() => controleur.abort(), TIMEOUT_CLOUD_MS);
+
   try {
     const audioBase64 = await blobEnBase64(blob);
-    const res = await fetch(`${String(c.functionsBaseUrl).replace(/\/$/, "")}/speech-transcribe`, {
+    const res = await fetch(url, {
       method: "POST",
       signal: controleur.signal,
       headers: {
         "Content-Type": "application/json",
-        "apikey": c.supabaseAnonKey,
-        ...(jeton ? { Authorization: `Bearer ${jeton}` } : {})
+        apikey: Cfg.supabaseAnonKey(),
+        Authorization: `Bearer ${jeton}`
       },
       body: JSON.stringify({
         audioBase64,
         mimeType: mimeType || "audio/webm",
         expected: expected || "",
-        // Le biasing est alimenté par les réponses validées et le vocabulaire
-        // de la leçon en cours. C'est le principal levier de qualité.
+        // Le guidage par le vocabulaire attendu est le principal levier
+        // de qualité sur une langue peu dotée comme le luxembourgeois.
         hints: [expected, ...(accepted || []), ...(contexte || [])].filter(Boolean).slice(0, 60)
       })
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return {
-        engine: "cloud", transcripts: [],
-        error: data.error || `Erreur cloud ${res.status}`,
-        errorKind: res.status === 429 ? "quota" : "service",
-        quota: data.quota || null,
-        latencyMs: Math.round(performance.now() - t0)
-      };
+
+    let data = {};
+    const texte = await res.text();
+    try { data = texte ? JSON.parse(texte) : {}; }
+    catch (_) {
+      // Réponse non JSON : presque toujours une page d'erreur de la
+      // plateforme, donc une fonction absente ou une mauvaise adresse.
+      return echec(CAUSE.FONCTION_INTROUVABLE,
+        `Réponse inattendue (${res.status}) à l'adresse ${url}`, { httpStatus: res.status });
     }
+
+    if (!res.ok) {
+      const cause = causeDeReponse(res.status, data);
+      return echec(cause, data.error || `Erreur HTTP ${res.status}`,
+        { httpStatus: res.status, quota: data.quota || null });
+    }
+
+    const transcripts = data.transcripts || [];
+    if (!transcripts.length) {
+      return echec(CAUSE.TRANSCRIPTION_VIDE, "Le service a répondu sans reconnaître de mot.",
+        { httpStatus: 200, usage: data.usage || null, model: data.model, lang: data.lang });
+    }
+
     return {
-      engine: "cloud",
-      transcripts: data.transcripts || [],
-      model: data.model || "",
-      lang: data.lang || "lb-LU",
-      error: "",
-      errorKind: "none",
-      usage: data.usage || null,
-      serverMs: data.serverMs || 0,
+      engine: "cloud", transcripts,
+      cause: CAUSE.OK, error: "", detail: "",
+      model: data.model || "", lang: data.lang || "lb-LU", region: data.region || "",
+      usage: data.usage || null, serverMs: data.serverMs || 0, httpStatus: 200,
       latencyMs: Math.round(performance.now() - t0)
     };
   } catch (err) {
-    return {
-      engine: "cloud", transcripts: [],
-      error: err.name === "AbortError" ? "Le service vocal n'a pas répondu à temps." : err.message,
-      errorKind: "service",
-      latencyMs: Math.round(performance.now() - t0)
-    };
+    const cause = causeDException(err);
+    const detailReseau = cause === CAUSE.RESEAU
+      ? `Appel vers ${url} sans réponse. Trois causes possibles : adresse fausse, projet Supabase en pause, ou requête bloquée par le navigateur faute d'autorisation d'origine.`
+      : err.message;
+    return echec(cause, detailReseau);
   } finally {
     clearTimeout(minuteur);
   }
 }
 
-/**
- * Exécution complète du pipeline pour une expression attendue.
- * Renvoie toujours une structure exploitable, y compris en cas de panne.
- */
+/* ---------- Pipeline complet ---------- */
+
 export async function evaluerReponse(item, opt = {}) {
+  const depart = performance.now();
   const trace = [];
   const marque = (etape, detail) => trace.push({ etape, ms: Math.round(performance.now() - depart), ...detail });
-  const depart = performance.now();
 
   const preference = opt.moteur || "auto";
   const attendu = item.lb;
@@ -159,52 +203,94 @@ export async function evaluerReponse(item, opt = {}) {
     parole: capture.vad?.speechDetected, paroleMs: capture.vad?.speechMs,
     plancherDb: Math.round(capture.vad?.noiseFloorDb ?? -100),
     picDb: Math.round(capture.vad?.peakDb ?? -100),
-    snrDb: Math.round(capture.vad?.snrDb ?? 0)
+    snrDb: Math.round(capture.vad?.snrDb ?? 0),
+    mesureFiable: capture.vad?.mesureFiable
   });
 
   const base = {
-    engine: "none", error: capture.error || "", errorKind: capture.errorKind || "none",
+    engine: "none", cause: CAUSE.OK, error: capture.error || "", detail: capture.vad?.detail || "",
+    errorKind: capture.errorKind || "none",
     speechDetected: !!capture.vad?.speechDetected,
     speechMs: capture.vad?.speechMs || 0,
     snrDb: capture.vad?.snrDb || 0,
     blob: capture.blob, mimeType: capture.mimeType, micro: capture.micro,
-    transcripts: [], match: null, trace
+    vad: capture.vad, transcripts: [], match: null, trace
   };
 
-  if (capture.errorKind === "mic") return finaliser(base);
+  if (capture.errorKind === "mic") { base.cause = CAUSE.MOTEUR_ABSENT; return finaliser(base); }
   if (!base.speechDetected) return finaliser(base);
 
   // 2. Transcription
   let stt = null;
   const veutCloud = preference === "cloud" || (preference === "auto" && cloudConfigure());
 
-  if (veutCloud && capture.blob) {
+  if (veutCloud) {
     stt = await reconnaissanceCloud({
       blob: capture.blob, mimeType: capture.mimeType,
       expected: attendu, accepted: acceptees, contexte: opt.contexte, jeton: opt.jeton
     });
-    marque("stt_cloud", { erreur: stt.error, n: stt.transcripts.length, latenceMs: stt.latencyMs, serveurMs: stt.serverMs });
+    marque("stt_cloud", { cause: stt.cause, http: stt.httpStatus, n: stt.transcripts.length, latenceMs: stt.latencyMs });
+  } else if (preference === "auto") {
+    const e = etatCloud(!!opt.jeton);
+    stt = { engine: "cloud", transcripts: [], cause: e.cause, error: e.resume, detail: e.resume, latencyMs: 0 };
+    marque("stt_cloud", { cause: e.cause, ignore: true });
   }
 
   const cloudMuet = !stt || !stt.transcripts.length;
-  if (cloudMuet && preference !== "cloud" && navigateurDisponible() && preference !== "echo") {
+  if (cloudMuet && preference !== "cloud" && preference !== "echo" && navigateurDisponible()) {
     const nav = await reconnaissanceNavigateur(Math.min(6000, opt.paroleMaxMs || 6000));
-    marque("stt_navigateur", { erreur: nav.error, n: nav.transcripts.length, latenceMs: nav.latencyMs });
+    marque("stt_navigateur", { cause: nav.cause, n: nav.transcripts.length, latenceMs: nav.latencyMs });
     if (nav.transcripts.length) stt = nav;
     else if (!stt) stt = nav;
+    else base.detailSecours = nav.error;
   }
 
-  if (!stt) stt = { engine: "echo", transcripts: [], error: "Aucun moteur de transcription disponible.", errorKind: "service", latencyMs: 0 };
+  if (!stt) {
+    stt = { engine: "echo", transcripts: [], cause: CAUSE.MOTEUR_ABSENT,
+            error: "Aucun moteur de transcription disponible.", latencyMs: 0 };
+  }
 
-  base.engine = stt.transcripts.length ? stt.engine : (stt.engine === "cloud" ? "cloud" : stt.engine);
+  // MODE AUTONOME.
+  // Aucun moteur n'a pu transcrire. Plutôt que de s'arrêter là, on
+  // analyse localement ce qui a été capté : durée et découpage en
+  // syllabes. L'application reste donc utilisable sans serveur, sans
+  // compte et sans configuration. Elle ne prétend rien juger de plus.
+  if (!stt.transcripts.length) {
+    base.rythme = analyserRythme({
+      enveloppe: capture.vad.enveloppe,
+      seuilDb: capture.vad.seuilDb,
+      dureeMs: capture.vad.speechMs,
+      fiable: capture.vad.mesureFiable
+    }, item.syl ?? null);
+    marque("rythme_local", {
+      verdict: base.rythme.verdict, noyaux: base.rythme.noyaux,
+      attendu: base.rythme.attendu, ratio: base.rythme.ratio
+    });
+    base.engine = "local";
+    base.causeTranscription = stt.cause;      // conservée pour le diagnostic
+    base.detailTranscription = stt.detail || stt.error || "";
+    base.messageRythme = phraseRythme(base.rythme);
+    base.detailRythme = detailRythme(base.rythme);
+    base.transcripts = [];
+    base.match = null;
+    base.errorKind = "none";
+    base.cause = CAUSE.OK;
+    base.error = "";
+    base.detail = "";
+    return finaliser(base);
+  }
+
   base.transcripts = stt.transcripts;
+  base.cause = stt.cause;
   base.error = stt.error || base.error;
-  base.errorKind = stt.errorKind || base.errorKind;
+  base.detail = stt.detail || texteComplet(stt.cause, stt.error);
   base.model = stt.model || "";
   base.lang = stt.lang || "";
+  base.httpStatus = stt.httpStatus;
   base.latencyMs = stt.latencyMs || 0;
   base.usage = stt.usage || null;
-  if (!stt.transcripts.length && stt.engine !== "cloud") base.engine = "echo";
+  base.engine = stt.transcripts.length ? stt.engine : "echo";
+  base.errorKind = stt.transcripts.length ? "none" : "service";
 
   // 3. Comparaison
   base.match = compare(attendu, acceptees, stt.transcripts);
@@ -226,4 +312,4 @@ function finaliser(r) {
   return r;
 }
 
-export { VERDICT, EFFET };
+export { VERDICT, EFFET, CAUSE };

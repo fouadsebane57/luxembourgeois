@@ -38,6 +38,33 @@ function makeId(lb) {
   return "lx" + createHash("sha1").update(idKey(lb), "utf8").digest("hex").slice(0, 8);
 }
 
+/**
+ * Nombre de syllabes, déduit du guide de prononciation.
+ * Le champ ph découpe explicitement par des traits d'union, par exemple
+ * « faï-er » ou « draï-tsèng ». On s'appuie sur ce découpage quand il
+ * existe, sinon sur les groupes de voyelles.
+ *
+ * Renvoie null quand le guide ne couvre pas toute l'expression, cas de
+ * onze entrées où la formule répétée est abrégée. Mieux vaut ne rien
+ * mesurer que mesurer faux.
+ */
+const VOYELLES = /[aeiouyàâäéèêëïîôöùûüœ]+/gi;
+function compterSyllabes(lb, ph) {
+  const motsLb = String(lb).replace(/[…\.]{1,3}/g, " ").trim().split(/\s+/).filter(Boolean);
+  const motsPh = String(ph || "").trim().split(/\s+/).filter(Boolean);
+  if (!motsPh.length) return null;
+  if (motsPh.length < motsLb.length) return null;   // guide incomplet
+
+  let n = 0;
+  for (const mot of motsPh) {
+    const parts = mot.split("-").filter(Boolean);
+    if (parts.length > 1) { n += parts.length; continue; }
+    const groupes = mot.match(VOYELLES);
+    n += groupes ? groupes.length : 1;
+  }
+  return Math.max(1, n);
+}
+
 const src = readFileSync(SRC, "utf8");
 // Le script est idempotent : il doit pouvoir relire sa propre sortie,
 // qui affecte window.LETZ_CONTENT et window.LETZ_LEGACY_MAP.
@@ -70,6 +97,8 @@ COURS.forEach((lesson, li) => {
     if (item.ver === undefined) item.ver = "";
     if (item.by === undefined) item.by = "";
     if (item.st === undefined) item.st = "unverified";
+    // Recalculé à chaque génération : dépend uniquement de lb et ph.
+    item.syl = compterSyllabes(item.lb, item.ph);
   });
 });
 
@@ -96,6 +125,7 @@ const itemLine = (it) => {
   if (it.src) parts.push(`src:${esc(it.src)}`);
   if (it.ver) parts.push(`ver:${esc(it.ver)}`);
   if (it.by) parts.push(`by:${esc(it.by)}`);
+  if (it.syl != null) parts.push(`syl:${it.syl}`);
   parts.push(`st:${esc(it.st)}`);
   return " {" + parts.join(",") + "}";
 };
@@ -115,6 +145,7 @@ let out = `/* ==================================================================
      src source de vérification
      ver date de vérification
      by  personne ayant validé
+     syl nombre de syllabes déduit de ph, absent si non mesurable
      st  unverified | reviewing | verified
 
    Tout contenu doit être vérifié sur lod.lu, dictionnaire du Zenter fir
@@ -139,7 +170,8 @@ DIALOGUES.forEach((d) => {
   out += `]},\n`;
 });
 out += `];\n\nconst BLOCS = ${JSON.stringify(BLOCS, null, 2)};\n`;
-out += `\nwindow.LETZ_CONTENT = { ETAPES, COURS, DIALOGUES, BLOCS, contentVersion: "5.0.0" };\n`;
+out += `\nwindow.LULU_CONTENT = { ETAPES, COURS, DIALOGUES, BLOCS, contentVersion: "5.1.0" };\n`;
+out += `window.LETZ_CONTENT = window.LULU_CONTENT;   // compatibilité 5.0.0\n`;
 
 // La table de migration est embarquée ici, pas seulement dans un fichier
 // séparé. Un échec de chargement réseau au démarrage ferait croire à une
@@ -159,6 +191,8 @@ console.log(`Leçons        : ${COURS.length}`);
 console.log(`Expressions   : ${Object.keys(legacyMap).length}`);
 console.log(`Identifiants uniques : ${idIndex.size}`);
 console.log(`Nouveaux ids  : ${assigned}   conservés : ${kept}`);
+const avecSyl = COURS.flatMap((l) => l.i).filter((i) => i.syl != null).length;
+console.log(`Syllabes mesurables : ${avecSyl} / ${Object.keys(legacyMap).length}`);
 console.log(`Ids partagés par plusieurs occurrences : ${shared.length}`);
 shared.forEach(([id, v]) => console.log(`  ${id}  ${v.lb}  <- ${v.occurrences.join(", ")}`));
 if (collisions.length) {
