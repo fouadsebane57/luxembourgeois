@@ -7,11 +7,16 @@
    =================================================================== */
 
 import { migrerLocal, chargerTable, CLE_V5 } from "./migrate.js";
-import { normaliserEntree, appliquer, exposer, fusionner } from "./scheduler.js";
+import { migrerLocalV6, CLE_V6, SCHEMA_COURANT, restaurerV5 } from "./migration6.js";
+import * as Preuve from "./preuve.js";
 import { COURS } from "./content.js";
 
+const lireCle = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+const ecrireCle = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+const supprimerCle = (k) => { try { localStorage.removeItem(k); } catch (_) {} };
+
 export const DEFAUTS = {
-  schema: 5,
+  schema: SCHEMA_COURANT,
   progress: {},
   validated: {},
   favorites: {},
@@ -23,7 +28,7 @@ export const DEFAUTS = {
     micDeviceId: "",
     attenteMaxMs: 4500, paroleMaxMs: 9000,
     voiceRate: 0.85, luxVoice: "", frVoice: "",
-    tips: true, echo: true, commandesVocales: false
+    tips: true, echo: true, commandesVocales: false, contexte: "trajet"
   },
   profile: { name: "Apprenant", email: "" },
 
@@ -53,11 +58,39 @@ export const migration = () => rapportMigration;
 
 export async function charger() {
   await chargerTable();
-  let v5 = null;
-  try { v5 = JSON.parse(localStorage.getItem(CLE_V5) || "null"); } catch (_) {}
 
+  // 1. État déjà au format 6.
+  let v6 = null;
+  try { v6 = JSON.parse(lireCle(CLE_V6) || "null"); } catch (_) {}
+  if (v6?.schema === SCHEMA_COURANT) {
+    etat = fusionProfonde(structuredClone(DEFAUTS), v6);
+    Object.keys(etat.progress).forEach((k) => { etat.progress[k] = Preuve.normaliser(etat.progress[k]); });
+    if (!etat.sync.deviceId) etat.sync.deviceId = identifiantAppareil();
+    sauver(false);
+    return etat;
+  }
+
+  // 2. Migration 5 vers 6 : sauvegarde, migration, vérification.
+  //    Aucune écriture si un seul niveau a baissé.
+  const m6 = migrerLocalV6(lireCle, ecrireCle);
+  rapportMigration = m6.rapport;
+  if (m6.etat) {
+    etat = fusionProfonde(structuredClone(DEFAUTS), m6.etat);
+    Object.keys(etat.progress).forEach((k) => { etat.progress[k] = Preuve.normaliser(etat.progress[k]); });
+    if (!etat.sync.deviceId) etat.sync.deviceId = identifiantAppareil();
+    sauver(false);
+    return etat;
+  }
+  if (m6.rapport.verification && !m6.rapport.verification.ok) {
+    console.error("Migration refusée, progression conservée telle quelle :", m6.rapport.verification.problemes.slice(0, 5));
+  }
+
+  // 3. Aucun état 6 : on repart de la chaîne v3 et v4.
+  let v5 = null;
+  try { v5 = JSON.parse(lireCle(CLE_V5) || "null"); } catch (_) {}
   if (v5 && v5.schema === 5) {
     etat = fusionProfonde(structuredClone(DEFAUTS), v5);
+    etat.schema = SCHEMA_COURANT;
   } else {
     const { etat: migre, rapport } = migrerLocal(COURS());
     rapportMigration = rapport;
@@ -72,9 +105,14 @@ export async function charger() {
     }
   }
   if (!etat.sync.deviceId) etat.sync.deviceId = identifiantAppareil();
-  Object.keys(etat.progress).forEach((k) => { etat.progress[k] = normaliserEntree(etat.progress[k]); });
+  Object.keys(etat.progress).forEach((k) => { etat.progress[k] = Preuve.normaliser(etat.progress[k]); });
   sauver(false);
   return etat;
+}
+
+/** Retour arrière vers la progression d'avant migration. */
+export function restaurerProgressionPrecedente() {
+  return restaurerV5(lireCle, ecrireCle, supprimerCle);
 }
 
 function identifiantAppareil() {
@@ -85,7 +123,7 @@ function identifiantAppareil() {
 }
 
 export function sauver(synchroniser = true) {
-  try { localStorage.setItem(CLE_V5, JSON.stringify(etat)); }
+  try { localStorage.setItem(CLE_V6, JSON.stringify(etat)); }
   catch (e) { console.warn("Sauvegarde locale impossible", e); }
   if (synchroniser && pousserVersCloud) {
     etat.sync.pending = true;
@@ -96,22 +134,72 @@ export function sauver(synchroniser = true) {
 
 export function brancherSync(fn) { pousserVersCloud = fn; }
 
-export const progressionDe = (id) => normaliserEntree(etat.progress[id]);
+export const progressionDe = (id) => Preuve.normaliser(etat.progress[id]);
+export const niveauDe = (id, dim) => Preuve.niveau(etat.progress[id], dim);
 
-/** Écrit un résultat. Un effet `none` ne touche à rien. */
-export function enregistrerResultat(id, effet, dimension, meta) {
+/**
+ * Écrit une PREUVE. Seule la transcription fiable est acceptée.
+ * Renvoie aussi la raison d'un éventuel refus, pour le journal.
+ */
+export function enregistrerPreuve(id, p) {
   const avant = progressionDe(id);
-  const apres = appliquer(avant, effet, dimension, meta);
-  if (JSON.stringify(avant) === JSON.stringify(apres)) return apres;
-  etat.progress[id] = apres;
+  const { entree, ecrit, raison } = Preuve.enregistrerPreuve(avant, p);
+  if (!ecrit) return { entree: avant, ecrit: false, raison };
+  etat.progress[id] = entree;
   sauver();
-  return apres;
+  return { entree, ecrit: true, raison: "" };
 }
 
-export function enregistrerExposition(id) {
-  etat.progress[id] = exposer(progressionDe(id));
+/** Écrit un SIGNAL. N'entre dans aucune dimension de maîtrise. */
+export function enregistrerAutoEvaluation(id, valeur) {
+  etat.progress[id] = Preuve.noterAutoEvaluation(progressionDe(id), valeur);
   sauver();
   return etat.progress[id];
+}
+
+export function enregistrerRythme(id, mesures) {
+  etat.progress[id] = Preuve.noterRythme(progressionDe(id), mesures);
+  sauver();
+  return etat.progress[id];
+}
+
+/**
+ * Enregistre une écoute. Ne fait monter AUCUNE dimension.
+ * C'est la correction P0.1 : en 5.1.0, deux écoutes suffisaient à
+ * faire monter le niveau de compréhension sans aucune preuve.
+ */
+export function enregistrerExposition(id) {
+  etat.progress[id] = Preuve.exposer(progressionDe(id));
+  sauver();
+  return etat.progress[id];
+}
+
+/**
+ * Résultat d'un exercice oral.
+ *
+ * Une transcription correspondant à l'attendu prouve la PRODUCTION
+ * LEXICALE : l'utilisateur a bien dit ce mot, et il était assez
+ * intelligible pour le moteur. Elle ne prouve PAS la prononciation :
+ * un moteur reconnaît souvent le bon mot malgré un accent marqué.
+ * La dimension prononciation reste donc non mesurée.
+ *
+ * Tout ce qui n'est pas une transcription fiable est refusé ici et
+ * doit passer par les fonctions de signaux.
+ */
+export function enregistrerResultat(id, { fiable, reussi, avecIndice, latenceMs } = {}) {
+  if (!fiable) return { entree: progressionDe(id), ecrit: false, raison: "source_non_probante" };
+  const r = enregistrerPreuve(id, {
+    dim: Preuve.DIM.PRODUCTION, source: Preuve.SOURCE.TRANSCRIPTION,
+    reussi: !!reussi, avecIndice: !!avecIndice, latenceMs
+  });
+  // Produire à voix haute depuis le français démontre aussi le rappel.
+  if (r.ecrit && reussi && !avecIndice) {
+    enregistrerPreuve(id, {
+      dim: Preuve.DIM.RAPPEL, source: Preuve.SOURCE.TRANSCRIPTION,
+      reussi: true, avecIndice: false, latenceMs
+    });
+  }
+  return r;
 }
 
 /** Mémorise où l'utilisateur en est. Appelé après chaque exercice. */
@@ -139,7 +227,7 @@ export function aReprendre() {
 
 export function instantane() {
   return {
-    schema: 5,
+    schema: SCHEMA_COURANT,
     contentVersion: (window.LULU_CONTENT || window.LETZ_CONTENT || {}).contentVersion || "",
     appVersion: (window.LULU_CONFIG || window.LETZ_CONFIG || {}).appVersion || "",
     updatedAt: new Date().toISOString(),
@@ -159,8 +247,8 @@ export function fusionnerDistant(distant) {
   if (!distant || typeof distant !== "object") return { fusionnees: 0, ajoutees: 0 };
   let fusionnees = 0, ajoutees = 0;
   for (const [id, valeur] of Object.entries(distant.progress || {})) {
-    if (etat.progress[id]) { etat.progress[id] = fusionner(etat.progress[id], valeur); fusionnees++; }
-    else { etat.progress[id] = normaliserEntree(valeur); ajoutees++; }
+    if (etat.progress[id]) { etat.progress[id] = Preuve.fusionner(etat.progress[id], valeur); fusionnees++; }
+    else { etat.progress[id] = Preuve.normaliser(valeur); ajoutees++; }
   }
   etat.validated = { ...(distant.validated || {}), ...etat.validated };
   etat.favorites = { ...(distant.favorites || {}), ...etat.favorites };

@@ -90,9 +90,16 @@
 
         <div class="stat-row">
           <article><strong id="statLessons">0/35</strong><span>leçons</span></article>
-          <article><strong id="statSolid">0</strong><span>expressions solides</span></article>
+          <article><strong id="statSolid">0</strong><span>maîtrise vérifiée</span></article>
           <article><strong id="statTime">0 min</strong><span>d'écoute</span></article>
           <article><strong id="statStreak">0 j</strong><span>de suite</span></article>
+        </div>
+
+        <div class="panel histo-panel" id="histoBlock" hidden>
+          <div>
+            <b><span id="statHisto">0</span> expressions en progression historique</b>
+            <small>Elles viennent de la version précédente. Elles sont conservées, mais elles ne comptent pas encore comme maîtrise vérifiée : l'ancienne application augmentait le niveau sur simple écoute. Chaque bonne réponse les recalibre.</small>
+          </div>
         </div>
 
         <div class="panel review-panel">
@@ -123,6 +130,16 @@
           <div><h3>Le mode oral ne te punit plus quand le téléphone comprend mal.</h3><p>Quand la reconnaissance n'est pas fiable, l'app bascule sur l'écho de ta voix et une auto-évaluation simple. Ta progression ne baisse pas à cause d'une erreur technique.</p></div>
           <button class="secondary" data-route="voice">Configurer</button>
         </article>
+      
+        <div class="panel">
+          <p class="kicker">CONTEXTE</p>
+          <h3>Où es-tu&nbsp;?</h3>
+          <div class="seg" id="contexteMode" role="group" aria-label="Contexte d'utilisation">
+            <button data-contexte="trajet" class="active">Au volant</button>
+            <button data-contexte="apprentissage">À l'arrêt</button>
+          </div>
+          <p class="muted small">Au volant, aucune interaction avec l'écran n'est demandée après le lancement. La séance enchaîne seule et ne propose que du contenu déjà vu. À l'arrêt, tu peux t'auto-évaluer, lire la phonétique et découvrir de nouvelles notions.</p>
+        </div>
       </section>
 
       <section class="view" id="view-courses" data-view="courses" hidden aria-hidden="true">
@@ -275,6 +292,7 @@
 
   <div class="session-overlay" id="sessionOverlay" hidden>
     <div class="session-top"><button class="session-exit" id="sessionExitBtn">Quitter</button><div><span id="sessionModeLabel">Séance</span><strong id="sessionCounter">1 / 10</strong></div><button class="session-pause" id="sessionPauseBtn">Pause</button></div>
+    <div class="session-meta"><span id="sessionMicEtat"></span><span id="sessionEtat" hidden></span></div>
     <div class="session-progress"><span id="sessionProgressBar"></span></div>
     <div class="session-stage">
       <div class="session-orb" id="sessionOrb"><span class="orb-mic">◌</span><div class="orb-pulse"></div></div>
@@ -283,6 +301,8 @@
       <p class="sessionPhonetic" id="sessionPhonetic"></p>
       <p class="sessionTranslation" id="sessionTranslation"></p>
       <div class="heard" id="sessionHeard" hidden></div>
+      <div class="rythme-note" id="sessionRythme" hidden role="status"></div>
+      <div class="echo-note" id="sessionEcho" hidden role="alert"></div>
       <div class="verdict-badge" id="sessionVerdict" hidden role="status" aria-live="polite"></div>
       <div class="mic-level" id="micLevel" aria-hidden="true"><i></i></div>
       <div class="session-feedback" id="sessionFeedback" hidden>

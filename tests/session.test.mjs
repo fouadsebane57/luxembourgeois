@@ -7,7 +7,7 @@ const items = Array.from({ length: 120 }, (_, i) => ({
 }));
 
 function jouer(dureeMinutes, dureeExerciceMs) {
-  const s = creerSeance({ mode: "smart", dureeMinutes, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 3 });
+  const s = creerSeance({ mode: "smart", dureeMinutes, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 3, seed: 7 });
   let t = 1_700_000_000_000;
   demarrer(s, t);
   let tours = 0;
@@ -32,7 +32,7 @@ for (const d of [10, 20, 30, 45, 60]) {
 
 test("la séance ne s'arrête pas prématurément quand la file est épuisée", () => {
   const petit = items.slice(0, 6);
-  const s = creerSeance({ mode: "review", dureeMinutes: 20, items: petit, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1 });
+  const s = creerSeance({ mode: "review", dureeMinutes: 20, items: petit, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1, seed: 7 });
   let t = 1_700_000_000_000; demarrer(s, t);
   let tours = 0;
   while (tours < 500) { const ex = prochain(s, t); if (!ex) break; t += 15000; terminerExercice(s, ex, 15000); tours++; }
@@ -40,7 +40,7 @@ test("la séance ne s'arrête pas prématurément quand la file est épuisée", 
 });
 
 test("l'estimation s'ajuste aux durées réellement observées", () => {
-  const s = creerSeance({ mode: "smart", dureeMinutes: 30, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 3 });
+  const s = creerSeance({ mode: "smart", dureeMinutes: 30, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 3, seed: 7 });
   let t = 1_700_000_000_000; demarrer(s, t);
   const avant = s.estimations[TYPES.ORAL];
   for (let i = 0; i < 6; i++) { const ex = prochain(s, t); if (!ex) break; t += 30000; terminerExercice(s, ex, 30000); }
@@ -49,13 +49,13 @@ test("l'estimation s'ajuste aux durées réellement observées", () => {
 
 test("REGRESSION P2 : le mode chiffres filtre par étape, pas par position", () => {
   const melange = items.map((i, k) => ({ ...i, lesson: 99 - (k % 35) }));
-  const s = creerSeance({ mode: "numbers", dureeMinutes: 5, items: melange, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1 });
+  const s = creerSeance({ mode: "numbers", dureeMinutes: 5, items: melange, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1, seed: 7 });
   assert.ok(s.file.length > 0, "la file est vide alors que l'étape 1 existe");
   assert.ok(s.file.every((e) => e.it.stage === 1));
 });
 
 test("le bilan n'invente pas de pourcentage sans mesure fiable", () => {
-  const s = creerSeance({ mode: "smart", dureeMinutes: 10, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1 });
+  const s = creerSeance({ mode: "smart", dureeMinutes: 10, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1, seed: 7 });
   demarrer(s);
   assert.equal(bilan(s).precision, null);
   s.fiables = 4; s.correct = 3;
@@ -63,7 +63,7 @@ test("le bilan n'invente pas de pourcentage sans mesure fiable", () => {
 });
 
 test("le temps restant ne devient jamais négatif", () => {
-  const s = creerSeance({ mode: "smart", dureeMinutes: 10, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1 });
+  const s = creerSeance({ mode: "smart", dureeMinutes: 10, items, dialogues: [], progression: {}, leconCourante: 0, etapeCourante: 1, seed: 7 });
   demarrer(s, 0);
   assert.equal(restantMs(s, 999_999_999), 0);
 });

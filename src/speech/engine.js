@@ -15,7 +15,7 @@
    et ne peut jamais faire baisser la progression.
    =================================================================== */
 
-import { capturer, blobEnBase64 } from "../audio/recorder.js";
+import { blobEnBase64 } from "../audio/recorder.js";
 import { liberer, fluxOuvert } from "../audio/mic.js";
 import { compare, verdictDe, VERDICT, EFFET } from "./score.js";
 import { CAUSE, causeDeReponse, causeDException, texteComplet } from "./erreurs.js";
@@ -181,6 +181,21 @@ export async function reconnaissanceCloud({ blob, mimeType, expected, accepted, 
 
 /* ---------- Pipeline complet ---------- */
 
+/**
+ * Évalue une réponse orale.
+ *
+ * La capture n'est PLUS effectuée ici. Elle est fournie par l'appelant
+ * via `opt.capturer`, ce qui garantit que le parcours de séance passe
+ * par la machine à états et que celle-ci traverse réellement LISTENING,
+ * RECORDING puis PROCESSING.
+ *
+ * En GATE 2, ce module appelait capturer() en direct : la machine
+ * restait alors en PREPARING pendant tout l'enregistrement, et Pause
+ * ne pouvait rien interrompre.
+ *
+ * @param {function} opt.capturer  obligatoire. Renvoie le même objet que
+ *                                 audio/recorder.js capturer().
+ */
 export async function evaluerReponse(item, opt = {}) {
   const depart = performance.now();
   const trace = [];
@@ -190,8 +205,19 @@ export async function evaluerReponse(item, opt = {}) {
   const attendu = item.lb;
   const acceptees = Array.isArray(item.alt) ? item.alt : [];
 
-  // 1. Capture
-  const capture = await capturer({
+  if (typeof opt.capturer !== "function") {
+    // Refus explicite plutôt que contournement silencieux.
+    return finaliser({
+      engine: "none", cause: CAUSE.MOTEUR_ABSENT, errorKind: "mic",
+      error: "Aucune source de capture fournie. La capture doit passer par l'orchestrateur audio.",
+      detail: "", speechDetected: false, speechMs: 0, snrDb: 0,
+      blob: null, mimeType: "", micro: null, vad: null,
+      transcripts: [], match: null, trace
+    });
+  }
+
+  // 1. Capture, déléguée à l'orchestrateur
+  const capture = await opt.capturer({
     profil: opt.profil || "calme",
     attenteMaxMs: opt.attenteMaxMs,
     paroleMaxMs: opt.paroleMaxMs,

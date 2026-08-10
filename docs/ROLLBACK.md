@@ -1,5 +1,23 @@
 # RETOUR ARRIÈRE
 
+## Niveau 0 · Revenir au modèle de progression précédent
+
+La migration vers le modèle de preuves conserve l'état antérieur intact
+sous la clé `lulu:v5:backup`. Il n'est jamais écrasé.
+
+Console du navigateur, sur la page de l'application :
+
+```js
+const s = localStorage.getItem("lulu:v5:backup");
+if (s) { localStorage.setItem("lulu:v5", JSON.stringify(JSON.parse(s).data));
+         localStorage.removeItem("lulu:v6"); location.reload(); }
+else console.log("Aucune sauvegarde trouvée.");
+```
+
+La migration refuse par ailleurs de s'exécuter si un seul champ hérité
+serait altéré, ou si une dimension du nouveau modèle se retrouvait
+préremplie. Dans ce cas, rien n'est écrit et l'état précédent reste actif.
+
 Trois niveaux, du plus léger au plus lourd. Commence toujours par le niveau 1.
 
 ## Niveau 1 · Vider le cache de l'application

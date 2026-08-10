@@ -7,6 +7,23 @@
 import * as C from "./core/content.js";
 import * as S from "./core/state.js";
 import * as Sched from "./core/scheduler.js";
+import * as Preuve from "./core/preuve.js";
+import { restituer } from "./core/restitution.js";
+
+/**
+ * Issue d'un exercice. La boucle en dépend pour décider si l'exercice
+ * compte comme fait.
+ *
+ * En GATE 2.2, `Sess.terminerExercice()` était appelé sans condition :
+ * une pause pendant la consigne faisait avancer l'index, et l'exercice
+ * était perdu. Reprendre repartait sur le suivant.
+ */
+export const ISSUE = {
+  TERMINE: "completed",     // joué jusqu'au bout : on avance
+  PAUSE: "paused",          // interrompu par Pause : on NE compte PAS, on rejouera
+  SAUTE: "skipped",         // Suivant : on avance sans aucune écriture pédagogique
+  ABANDONNE: "aborted"      // Quitter ou interruption système : on sort
+};
 import * as Sess from "./core/session.js";
 import * as Mig from "./core/migrate.js";
 import * as Voix from "./audio/tts.js";
@@ -21,6 +38,8 @@ import { rendre, toast, $, $$, echapper, ouvrirModale, fermerModale } from "./ui
 import { brancherDiagnostic, lancerTestMicro } from "./ui/diagnostic.js";
 import * as Commandes from "./ui/commandes.js";
 import * as Cfg from "./core/config.js";
+import * as Machine from "./audio/machine.js";
+import { LECTURE, reussie as lectureReussie, MESSAGE as MSG_LECTURE } from "./audio/lecture.js";
 
 export const VERSION = Cfg.version();
 
@@ -33,6 +52,27 @@ let droits = { premium: false, source: "local", statut: "local" };
 let promptInstall = null;
 let dernierEnregistrement = null;
 let resolutionAuto = null;
+let audio = null;                 // machine à états, propriétaire du son
+let jetonAudio = 0;
+
+/**
+ * P0.10 · Deux logiques pédagogiques distinctes.
+ *
+ * TRAJET       aucune interaction visuelle obligatoire après le lancement.
+ *              Uniquement du contenu déjà introduit hors conduite.
+ * APPRENTISSAGE écran autorisé, auto-évaluation possible, nouveautés.
+ */
+export const CONTEXTE = { TRAJET: "trajet", APPRENTISSAGE: "apprentissage" };
+const MODES_TRAJET = new Set(["smart", "review", "repeat", "listen", "sprint", "numbers"]);
+let contexte = CONTEXTE.TRAJET;
+export const contexteActuel = () => contexte;
+export function definirContexte(c) {
+  contexte = c === CONTEXTE.APPRENTISSAGE ? CONTEXTE.APPRENTISSAGE : CONTEXTE.TRAJET;
+  S.state().settings.contexte = contexte;
+  S.sauver();
+  rendre();
+}
+export const enTrajet = () => contexte === CONTEXTE.TRAJET;
 
 export const estPremium = () => !!droits.premium;
 export const routeActive = () => route;
@@ -58,8 +98,8 @@ export const leconCourante = () => {
   return Math.max(0, cours.length - 1);
 };
 export const etapeCourante = () => C.COURS()[leconCourante()]?.e || 1;
-export const dus = () => C.itemsUniques().filter((i) => Sched.estDu(S.progressionDe(i.id)));
-export const solides = () => C.itemsUniques().filter((i) => Sched.estSolide(S.progressionDe(i.id)));
+export const dus = () => C.itemsUniques().filter((i) => Preuve.estDu(S.progressionDe(i.id)));
+export const solides = () => C.itemsUniques().filter((i) => Preuve.estSolide(S.progressionDe(i.id)));
 export const leconsValidees = () => Object.values(S.state().validated).filter(Boolean).length;
 export const minutesAujourdHui = () => Number(S.state().journal.hist?.[Sched.aujourdHui()] || 0);
 
@@ -67,7 +107,7 @@ function verifierLecon(li) {
   const lecon = C.COURS()[li];
   if (!lecon) return;
   const its = C.itemsDeLecon(li);
-  const ok = its.filter((i) => Sched.estSolide(S.progressionDe(i.id))).length;
+  const ok = its.filter((i) => Preuve.estSolide(S.progressionDe(i.id))).length;
   if (ok >= Math.ceil(its.length * 0.8)) { S.state().validated[lecon.lid] = true; S.sauver(); }
 }
 
@@ -107,10 +147,17 @@ export async function demarrerMode(mode, leconForcee = null) {
     toast(`La formule Découverte est limitée à ${maxGratuit} minutes par séance.`);
   }
 
-  // Nous sommes dans un geste utilisateur : c'est le seul moment où
-  // iOS accepte de démarrer le moteur audio. On l'attend vraiment.
-  await Micro.reveiller();
-  await Voix.preparer();
+  // P0.8 · une seule séance à la fois. La machine refuse la seconde.
+  if (audio?.occupe()) { toast("Une séance est déjà en cours."); return; }
+  audio = Machine.creer({ onEtat: (e) => { const el = $("sessionEtat"); if (el) el.textContent = e; } });
+  const dep = await audio.demarrer();
+  if (!dep.ok) {
+    toast(dep.cause === "contexte_audio_endormi"
+      ? "Le moteur audio n'a pas démarré. Touche l'écran puis réessaie."
+      : "Une séance est déjà en cours.");
+    audio = null; return;
+  }
+  jetonAudio = dep.jeton;
 
   const s = Sess.creerSeance({
     mode,
@@ -121,7 +168,15 @@ export async function demarrerMode(mode, leconForcee = null) {
     leconCourante: leconForcee ?? leconCourante(),
     etapeCourante: etapeCourante()
   });
-  if (!s.file.length && !s.recyclage.length) { toast("Aucun contenu disponible pour ce mode."); return; }
+  if (!s.file.length && !s.recyclage.length) {
+    // La machine a déjà été démarrée : il faut impérativement la
+    // libérer, sans quoi elle reste occupée et bloque toute séance
+    // ultérieure.
+    await audio.terminer("aucun_contenu");
+    audio = null;
+    toast("Aucun contenu disponible pour ce mode.");
+    return;
+  }
 
   fermerModale("lessonModal");
   seance = s;
@@ -136,33 +191,99 @@ export async function demarrerMode(mode, leconForcee = null) {
   await boucleSeance(jetonSeance);
 }
 
+/**
+ * Exercice retenu par la boucle, pas encore consommé.
+ *
+ * La boucle est la seule source de vérité sur ce qu'est « l'exercice
+ * courant ». Le tenir explicitement permet de le sauter ou de le
+ * rejouer sans dépendre d'un état volatil.
+ */
+let exerciceCourant = null;
+
+/**
+ * Saut demandé mais pas encore consommé.
+ *
+ * En GATE 2.3, un saut demandé pendant la pause reposait sur le motif
+ * de la machine, que `reinitialiserMotif()` effaçait au tour suivant
+ * avant qu'il soit lu. Le saut était perdu et le même exercice
+ * revenait. Une commande en attente, consommée par la boucle, ne peut
+ * pas être effacée par une opération audio.
+ */
+let sautEnAttente = false;
+
 async function boucleSeance(jeton) {
   while (seance && jeton === jetonSeance) {
-    if (enPause) { await pause(200); continue; }
-    const ex = Sess.prochain(seance);
-    if (!ex) break;
-    majBandeau();
-    const t0 = Date.now();
-    if (ex.type === Sess.TYPES.DIALOGUE) await jouerDialogue(ex.dialogue, jeton);
-    else await jouerExercice(ex, jeton);
-    if (!seance || jeton !== jetonSeance) return;
-    Sess.terminerExercice(seance, ex, Date.now() - t0);
 
-    // Position mémorisée après CHAQUE exercice. Une fermeture brutale de
-    // l'application, un appel entrant ou une batterie vide ne fait donc
-    // jamais perdre plus d'un exercice.
-    const it = ex.it || null;
-    S.noterPosition({
-      mode: seance.mode,
-      lecon: it ? it.lesson : leconCourante(),
-      lid: it ? it.lid : "",
-      itemId: it ? it.id : "",
-      position: seance.index,
-      seanceMinutes: Math.round(seance.cibleMs / 60000),
-      terminee: false
-    });
+    // 1. Un saut demandé est consommé AVANT toute autre décision, y
+    //    compris pendant une pause. Rien n'est joué, le micro reste
+    //    fermé, et la séance ne sort pas de pause.
+    if (sautEnAttente && exerciceCourant) {
+      Sess.sauterExercice(seance, exerciceCourant);
+      audio?.tracer("saut_consomme", { id: exerciceCourant.it?.id || "", enPause });
+      noterPosition(exerciceCourant, false);
+      exerciceCourant = null;
+      sautEnAttente = false;
+      majBandeau();
+      continue;
+    }
+
+    // 2. En pause, aucun exercice n'est consommé ni démarré.
+    if (enPause) { await pause(200); continue; }
+
+    // 3. On reprend l'exercice retenu, sinon on en prend un nouveau.
+    const ex = exerciceCourant || Sess.prochain(seance);
+    if (!ex) break;
+    exerciceCourant = ex;
+    majBandeau();
+
+    // Le motif n'est effacé qu'au moment de jouer, jamais avant.
+    audio?.reinitialiserMotif();
+    const t0 = Date.now();
+
+    const issue = ex.type === Sess.TYPES.DIALOGUE
+      ? await jouerDialogue(ex.dialogue, jeton)
+      : await jouerExercice(ex, jeton);
+
+    if (!seance || jeton !== jetonSeance) return;
+    if (issue === ISSUE.ABANDONNE) return;
+
+    if (issue === ISSUE.PAUSE) {
+      // L'exercice reste retenu. L'index ne bouge pas. Aucune écriture.
+      // La reprise rejouera exactement le même exercice.
+      continue;
+    }
+
+    if (issue === ISSUE.SAUTE) {
+      Sess.sauterExercice(seance, ex);
+      noterPosition(ex, false);
+      exerciceCourant = null;
+      sautEnAttente = false;   // la demande vient d'être honorée
+      continue;
+    }
+
+    Sess.terminerExercice(seance, ex, Date.now() - t0);
+    noterPosition(ex, true);
+    exerciceCourant = null;
   }
   if (seance && jeton === jetonSeance) cloturer();
+}
+
+/**
+ * Position mémorisée après chaque exercice consommé. Une fermeture
+ * brutale, un appel entrant ou une batterie vide ne fait donc jamais
+ * perdre plus d'un exercice.
+ */
+function noterPosition(ex, joue) {
+  const it = ex.it || null;
+  S.noterPosition({
+    mode: seance.mode,
+    lecon: it ? it.lesson : leconCourante(),
+    lid: it ? it.lid : "",
+    itemId: it ? it.id : "",
+    position: seance.index,
+    seanceMinutes: Math.round(seance.cibleMs / 60000),
+    terminee: false
+  });
 }
 
 function majBandeau() {
@@ -174,54 +295,88 @@ function majBandeau() {
   $("sessionProgressBar").style.width = `${Math.round(Sess.progressionTemps(seance) * 100)}%`;
 }
 
-function afficher({ phase, prompt = "", phonetique = "", traduction = "", entendu = "", verdict = "" }) {
+/**
+ * P0.7 · La transcription et le rythme sont deux informations de nature
+ * différente. La 5.1.0 les affichait dans le même emplacement, préfixés
+ * du même « Entendu : ». « 1 groupe de son sur 1 attendu » laissait donc
+ * croire que le mot avait été reconnu. Deux zones distinctes désormais,
+ * et le rythme disparaît dès qu'une transcription existe.
+ */
+function afficher({ phase, prompt = "", phonetique = "", traduction = "", entendu = "", rythme = "", verdict = "" }) {
   $("sessionPhase").textContent = phase || "";
   $("sessionPrompt").textContent = prompt;
   $("sessionPhonetic").textContent = phonetique;
   $("sessionTranslation").textContent = traduction;
   const h = $("sessionHeard");
-  h.hidden = !entendu;
-  h.textContent = entendu ? `Entendu : ${entendu}` : "";
+  if (h) {
+    h.hidden = !entendu;
+    h.textContent = entendu ? `Entendu : ${entendu}` : "";
+  }
+  const ry = $("sessionRythme");
+  if (ry) {
+    // Jamais les deux en même temps. La transcription prime toujours.
+    const afficherRythme = !entendu && !!rythme;
+    ry.hidden = !afficherRythme;
+    ry.textContent = afficherRythme ? `Rythme mesuré, les mots ne sont pas analysés : ${rythme}` : "";
+  }
   const b = $("sessionVerdict");
   if (b) { b.hidden = !verdict; b.textContent = verdict ? LIBELLE[verdict] || "" : ""; b.dataset.verdict = verdict || ""; }
   $("sessionFeedback").hidden = true;
   $("sessionOrb").classList.remove("listening");
 }
 
+/**
+ * Traduit l'état courant en issue. Une opération interrompue n'est
+ * jamais confondue avec une opération terminée.
+ */
+function issueCourante() {
+  const m = audio?.motif();
+  if (m === Machine.MOTIF.PAUSE) return ISSUE.PAUSE;
+  if (m === Machine.MOTIF.SUIVANT) return ISSUE.SAUTE;
+  if (m === Machine.MOTIF.SORTIE || m === Machine.MOTIF.SYSTEME) return ISSUE.ABANDONNE;
+  if (!seance) return ISSUE.ABANDONNE;
+  return ISSUE.TERMINE;
+}
+
 async function jouerExercice(ex, jeton) {
   const it = ex.it;
-  const vivant = () => seance && jeton === jetonSeance;
+  const vivant = () => seance && jeton === jetonSeance && (!audio || audio.vivant(jetonAudio));
 
   if (ex.type === Sess.TYPES.ECOUTE) {
     afficher({ phase: "Écoute", prompt: it.lb, phonetique: it.ph });
-    await Voix.dire(it.lb, "lb");
-    if (!vivant()) return;
+    await audio.direModele(it.lb, "lb");
+    if (!vivant()) return issueCourante();
     afficher({ phase: "Sens", prompt: it.lb, phonetique: it.ph, traduction: it.fr });
-    await Voix.dire(it.fr, "fr");
-    if (!vivant()) return;
-    await Voix.dire(it.lb, "lb", 0.9);
+    await audio.direConsigne(it.fr);
+    if (!vivant()) return issueCourante();
+    await audio.direModele(it.lb, "lb", 0.9);
     S.enregistrerExposition(it.id);
-    return;
+    return ISSUE.TERMINE;
   }
 
   if (ex.type === Sess.TYPES.NOMBRE) {
     afficher({ phase: "Quel nombre ?", prompt: it.lb });
-    await Voix.dire(it.lb, "lb");
-    await pause(1500);
-    if (!vivant()) return;
+    await audio.direModele(it.lb, "lb");
+    await audio.attendreUtilisateur(1500);
+    if (!vivant()) return issueCourante();
     afficher({ phase: "Réponse", prompt: it.lb, traduction: it.fr });
-    await Voix.dire(it.fr, "fr");
+    await audio.direConsigne(it.fr);
     S.enregistrerExposition(it.id);
-    return;
+    return ISSUE.TERMINE;
   }
 
   // Exercice oral.
   afficher({ phase: "À toi", prompt: `Comment dis-tu : ${it.fr} ?` });
-  await Voix.dire(`Comment dis-tu : ${it.fr} ?`, "fr");
-  if (!vivant()) return;
+  await audio.direConsigne(`Comment dis-tu : ${it.fr} ?`);
+  if (!vivant()) return issueCourante();
+  await audio.attendreUtilisateur();
+  if (!vivant()) return issueCourante();
 
   $("sessionOrb").classList.add("listening");
   const r = await Moteur.evaluerReponse(it, {
+    // Point de passage obligatoire : la machine traverse réellement
+    // LISTENING, RECORDING puis PROCESSING, et referme le micro.
+    capturer: (o) => audio.capturerReponse(o),
     moteur: S.state().settings.recognition,
     profil: S.state().settings.profilAudio,
     attenteMaxMs: S.state().settings.attenteMaxMs,
@@ -232,7 +387,7 @@ async function jouerExercice(ex, jeton) {
     annule: () => !vivant() || enPause
   });
   $("sessionOrb").classList.remove("listening");
-  if (!vivant()) return;
+  if (!vivant()) return issueCourante();
 
   dernierEnregistrement = r.blob || null;
   seance.tentatives++;
@@ -242,49 +397,102 @@ async function jouerExercice(ex, jeton) {
   afficher({
     phase: LIBELLE[r.verdict],
     prompt: it.lb, phonetique: it.ph, traduction: it.fr,
-    entendu: r.engine === "local" ? (r.detailRythme || "") : (r.match?.texte || ""),
+    // « Entendu » n'est renseigné QUE s'il y a eu une vraie transcription.
+    entendu: r.engine === "local" ? "" : (r.match?.texte || ""),
+    rythme: r.engine === "local" ? (r.detailRythme || "") : "",
     verdict: r.verdict
   });
 
-  // Écriture de la progression. Un effet NONE n'écrit rien du tout.
-  if (r.effet !== EFFET.NONE) {
-    S.enregistrerResultat(it.id, r.effet, "production", { fiable: r.fiable, confidence: r.match?.confidence });
-    verifierLecon(it.lesson);
+  // ÉCRITURE. Seule une transcription fiable entre dans les dimensions.
+  // Une transcription correcte prouve la production lexicale, pas la
+  // qualité de la prononciation : le moteur reconnaît souvent le bon
+  // mot malgré un accent marqué.
+  if (r.fiable && r.engine === "cloud") {
+    const reussi = r.verdict === VERDICT.CORRECT;
+    const w = S.enregistrerResultat(it.id, {
+      fiable: true, reussi, avecIndice: false, latenceMs: r.totalMs
+    });
+    if (w.ecrit) verifierLecon(it.lesson);
+  }
+
+  // Les mesures locales sont des SIGNAUX. Elles ne montent aucune
+  // dimension. Elles servent au diagnostic et à l'ordonnancement.
+  if (r.vad) {
+    S.enregistrerRythme(it.id, {
+      attemptDetected: !!r.speechDetected,
+      speechDurationMs: r.speechMs,
+      rhythmSimilarity: r.rythme?.mesurable
+        ? Math.max(0, 1 - Math.abs(r.rythme.ecart) / Math.max(1, r.rythme.attendu))
+        : 0,
+      syllabicGroups: r.rythme?.noyaux || 0,
+      localAudioQuality: Math.max(0, Math.min(1, (r.snrDb || 0) / 40))
+    });
   }
 
   // Mode autonome : le rythme d'abord, s'il y a quelque chose à dire,
   // puis le modèle, puis sa propre voix. C'est la comparaison directe
   // qui apprend, pas la note.
-  if (r.engine === "local") {
-    if (r.messageRythme) await Voix.dire(r.messageRythme, "fr");
-    else await Voix.dire("Écoute le modèle, puis ta voix.", "fr");
-    if (!vivant()) return;
-    await Voix.dire(it.lb, "lb", 0.8);
-    if (!vivant()) return;
-    if (r.blob) await Rec.lireBlob(r.blob);
-    if (!vivant()) return;
-    await Voix.dire(it.lb, "lb", 0.9);
-  } else {
-    await Voix.dire(MESSAGE[r.verdict], "fr");
-    if (!vivant()) return;
-    if (r.verdict !== VERDICT.CORRECT) {
-      await Voix.dire(it.lb, "lb", 0.85);
-      if (!vivant()) return;
-      // Entendre sa propre voix juste après le modèle est le meilleur
-      // moyen de distinguer un problème de prononciation d'un problème de micro.
-      if (S.state().settings.echo && r.blob) await Rec.lireBlob(r.blob);
-    }
-  }
+  // Séquence unique, partagée avec les tests d'intégration :
+  // retour, puis ta voix si l'écho est activé, puis le modèle en
+  // dernier. Voir src/core/restitution.js pour le raisonnement.
+  await restituer({
+    audio, item: it, vivant,
+    resultat: { ...r, correct: r.verdict === VERDICT.CORRECT },
+    messageVerdict: MESSAGE[r.verdict],
+    echoActive: !!S.state().settings.echo,
+    rejouer: (res) => rejouerVoix(res)
+  });
 
   // Auto-évaluation proposée uniquement quand le système n'a pas pu trancher,
   // et jamais bloquante. La séance continue seule si personne ne touche l'écran.
-  if (r.effet === EFFET.NONE && r.verdict !== VERDICT.MICRO) {
+  // P0.10 · En Mode trajet, aucune interaction visuelle n'est demandée.
+  // La séance enchaîne seule. L'auto-évaluation reste disponible hors
+  // conduite, où regarder l'écran ne met personne en danger.
+  if (r.effet === EFFET.NONE && r.verdict !== VERDICT.MICRO && !enTrajet()) {
     const choix = await demanderAutoEvaluation(jeton, r.engine === "local" ? 9000 : 8000);
-    if (choix && vivant()) {
-      S.enregistrerResultat(it.id, choix, "production", { fiable: false });
-      verifierLecon(it.lesson);
-    }
+    // Ce que tu déclares ressentir est une information utile pour
+    // choisir quoi te repropose, mais ce n'est pas une preuve de
+    // compétence : on peut croire savoir et se tromper.
+    if (choix && vivant()) S.enregistrerAutoEvaluation(it.id, choix);
   }
+
+  return issueCourante();
+}
+
+/**
+ * P0.2 · Rejoue la voix de l'utilisateur et dit la vérité sur le résultat.
+ * La 5.1.0 avalait l'échec : `audio.play().catch(fin)` résolvait comme
+ * un succès. L'utilisateur n'entendait rien et rien ne le signalait.
+ */
+async function rejouerVoix(r) {
+  if (!S.state().settings.echo) return null;
+  if (!r.blob || !r.blob.size) {
+    afficherEcho("Enregistrement impossible : aucun audio n'a été capté.");
+    return null;
+  }
+  const res = await audio.rejouerVoix(r.blob);
+  if (lectureReussie(res)) { afficherEcho(""); return res; }
+
+  // Échec réel : on le dit, à l'écran et à voix haute si utile.
+  const messages = {
+    [LECTURE.BLOQUEE_IOS]: "Ta voix n'a pas pu être rejouée. Touche l'écran une fois, puis relance.",
+    [LECTURE.DECODAGE]: `Ta voix n'a pas pu être rejouée sur ce navigateur. Format ${r.mimeType || "inconnu"}.`,
+    [LECTURE.INAUDIBLE]: "Ta voix a été jouée mais le volume était nul. Vérifie le son du téléphone.",
+    [LECTURE.AUCUN_AUDIO]: "Enregistrement impossible : aucun audio à relire.",
+    [LECTURE.DEMARREE_INTERROMPUE]: "La lecture de ta voix a été interrompue."
+  };
+  const m = messages[res.etat] || MSG_LECTURE[res.etat] || "Lecture de ta voix impossible.";
+  afficherEcho(m);
+  if (!enTrajet()) toast(m);
+  console.warn("Écho:", res.etat, res.message);
+  return res;
+}
+
+function afficherEcho(message) {
+  const el = $("sessionEcho");
+  if (!el) return;
+  el.hidden = !message;
+  el.textContent = message || "";
 }
 
 function peindreNiveau({ db, etat, seuil }) {
@@ -308,22 +516,23 @@ function demanderAutoEvaluation(jeton, delaiMs) {
 }
 
 async function jouerDialogue(d, jeton) {
-  const vivant = () => seance && jeton === jetonSeance;
+  const vivant = () => seance && jeton === jetonSeance && (!audio || audio.vivant(jetonAudio));
   afficher({ phase: "Dialogue", prompt: d.t, traduction: "Écoute le sens général" });
-  await Voix.dire("Écoute cette conversation.", "fr");
+  await audio.direConsigne("Écoute cette conversation.");
   for (const l of d.l) {
-    if (!vivant()) return;
+    if (!vivant()) return issueCourante();
     afficher({ phase: `Voix ${l.q}`, prompt: l.lb });
-    await Voix.dire(l.lb, "lb", l.q === "A" ? 0.95 : 1.05);
+    await audio.direModele(l.lb, "lb", l.q === "A" ? 0.95 : 1.05);
   }
-  if (!vivant()) return;
-  await Voix.dire("On reprend avec la traduction.", "fr");
+  if (!vivant()) return issueCourante();
+  await audio.direConsigne("On reprend avec la traduction.");
   for (const l of d.l) {
-    if (!vivant()) return;
+    if (!vivant()) return issueCourante();
     afficher({ phase: `Voix ${l.q}`, prompt: l.lb, traduction: l.fr });
-    await Voix.dire(l.lb, "lb");
-    await Voix.dire(l.fr, "fr");
+    await audio.direModele(l.lb, "lb");
+    await audio.direConsigne(l.fr);
   }
+  return ISSUE.TERMINE;
 }
 
 function cloturer() {
@@ -350,7 +559,7 @@ function cloturer() {
       : `${solides().length} expressions solides. Aucune mesure fiable sur cette séance.`
   });
   $("sessionProgressBar").style.width = "100%";
-  Voix.dire("Séance terminée.", "fr");
+  audio?.direRetour("Séance terminée.");
   const s = seance;
   setTimeout(() => { if (seance === s) { arreterSeance(); allerA("home"); } }, 3800);
 }
@@ -367,14 +576,16 @@ function demarrerCommandesVocales() {
   });
 }
 
-export function arreterSeance() {
+/** P0.6 · Quitter libère tout, de façon déterministe et vérifiable. */
+export async function arreterSeance(raison = "sortie") {
   Commandes.arreter();
   jetonSeance++;
   seance = null;
   enPause = false;
-  resolutionAuto = null;
-  Voix.stopper();
-  Micro.fermer();
+  if (resolutionAuto) { const r = resolutionAuto; resolutionAuto = null; r(null); }
+  dernierEnregistrement = null;
+  if (audio) { await audio.terminer(raison); audio = null; }
+  else { arreterSonPonctuel(); }   // hors séance : lexique, aperçu de voix
   desactiverMediaSession();
   $("sessionOverlay").hidden = true;
   document.body.style.overflow = "";
@@ -392,7 +603,7 @@ function activerMediaSession() {
     });
     navigator.mediaSession.setActionHandler("play", () => basculerPause(false));
     navigator.mediaSession.setActionHandler("pause", () => basculerPause(true));
-    navigator.mediaSession.setActionHandler("previoustrack", () => Voix.repeter());
+    navigator.mediaSession.setActionHandler("previoustrack", () => repeter());
     navigator.mediaSession.setActionHandler("nexttrack", () => passerExercice());
     navigator.mediaSession.playbackState = "playing";
   } catch (_) {}
@@ -405,11 +616,32 @@ function desactiverMediaSession() {
   } catch (_) {}
 }
 
-export function basculerPause(force) {
+/**
+ * P0.5 · Pause réelle.
+ * La 5.1.0 ne coupait que le libellé du bouton et la voix. Le micro
+ * restait ouvert, l'indicateur du téléphone allumé, la détection de
+ * parole active. C'était un problème de vie privée.
+ */
+export async function basculerPause(force) {
+  if (!seance) return;
   enPause = typeof force === "boolean" ? force : !enPause;
-  $("sessionPauseBtn").textContent = enPause ? "Reprendre" : "Pause";
-  if (enPause) Voix.stopper();
-  if ("mediaSession" in navigator) { try { navigator.mediaSession.playbackState = enPause ? "paused" : "playing"; } catch (_) {} }
+  const b = $("sessionPauseBtn"); if (b) b.textContent = enPause ? "Reprendre" : "Pause";
+
+  if (enPause) {
+    // Coupe voix, micro et détection, et pose le motif « pause ».
+    // L'exercice en cours ne sera PAS compté comme terminé : la boucle
+    // le rejouera à l'identique après la reprise.
+    await audio?.pause();
+    // Une éventuelle auto-évaluation en attente est relâchée sans écrire.
+    if (resolutionAuto) { const r = resolutionAuto; resolutionAuto = null; $("sessionFeedback").hidden = true; r(null); }
+  } else {
+    audio?.reprendre();
+  }
+  if ("mediaSession" in navigator) {
+    try { navigator.mediaSession.playbackState = enPause ? "paused" : "playing"; } catch (_) {}
+  }
+  const t = $("sessionMicEtat");
+  if (t) t.textContent = enPause ? "Micro coupé" : "";
 }
 
 /**
@@ -418,10 +650,39 @@ export function basculerPause(force) {
  * faisait tourner deux boucles en parallèle. Ici, on coupe seulement la
  * voix : la boucle en cours détecte la fin et enchaîne toute seule.
  */
-export function passerExercice() {
-  if (!seance) return;
-  Voix.stopper();
+/**
+ * Passer à l'exercice suivant.
+ *
+ * En GATE 2.2, cette commande se contentait d'arrêter la voix : la
+ * capture pouvait continuer derrière, et rien ne garantissait un saut
+ * unique. Elle annule désormais l'opération audio par l'orchestrateur,
+ * libère le micro, n'écrit aucune preuve, et pose un motif que la
+ * boucle traduit en un seul saut.
+ */
+export async function passerExercice() {
+  if (!seance || !audio) return false;
+
+  // Verrou : une seule demande de saut peut être en attente. Deux
+  // appuis rapprochés ne sautent donc jamais deux exercices. Le verrou
+  // est levé par la boucle au moment où elle honore la demande, pas
+  // par un minuteur qui pourrait expirer trop tôt ou trop tard.
+  if (sautEnAttente) return false;
+  sautEnAttente = true;
+
+  // Une auto-évaluation en attente est relâchée sans rien écrire.
   if (resolutionAuto) { const r = resolutionAuto; resolutionAuto = null; $("sessionFeedback").hidden = true; r(null); }
+
+  if (enPause) {
+    // On RESTE en pause. Aucune voix relancée, aucun micro rouvert.
+    // La boucle consommera le saut à son prochain tour et l'exercice
+    // suivant ne démarrera qu'à la reprise.
+    audio.tracer("saut_demande_en_pause", { etat: audio.etat() });
+    return true;
+  }
+
+  // Séance active : on annule l'opération audio en cours.
+  await audio.sauter();
+  return true;
 }
 
 /**
@@ -438,7 +699,20 @@ export async function reprendre() {
   return demarrerMode(r.mode || "smart", lecon);
 }
 
-export function repeter() { Voix.repeter(); }
+/** Répéter. Passe par l'orchestrateur quand une séance est active. */
+/**
+ * Écoute ponctuelle, hors séance : un mot touché dans le lexique.
+ * Si une séance tourne, l'orchestrateur reste seul maître du son.
+ */
+function ecouterMot(texte) {
+  if (audio?.occupe()) { toast("Une séance est en cours."); return; }
+  return Voix.dire(texte, "lb");
+}
+
+/** Coupe un son ponctuel joué hors séance. Jamais appelé pendant une séance. */
+function arreterSonPonctuel() { Voix.stopper(); }
+
+export function repeter() { if (audio?.occupe()) audio.repeter(); else Voix.repeter(); }
 export function dernierAudio() { return dernierEnregistrement; }
 
 /* ---------- droits ---------- */
@@ -491,7 +765,7 @@ function brancherEvenements() {
       S.state().favorites[id] = !S.state().favorites[id];
       S.sauver(); return rendre();
     }
-    const sp = t("[data-speak]"); if (sp) return Voix.dire(decodeURIComponent(sp.dataset.speak), "lb");
+    const sp = t("[data-speak]"); if (sp) return ecouterMot(decodeURIComponent(sp.dataset.speak));
     const cm = t("[data-close-modal]"); if (cm) return fermerModale(cm.dataset.closeModal);
     // Correction P0-4 : les boutons Dialogues et Mes erreurs étaient inertes.
     const pf = t("[data-premium-feature]"); if (pf) {
@@ -533,6 +807,10 @@ function brancherEvenements() {
     const b = e.target.closest("button[data-value]"); if (!b) return;
     S.state().settings.recognition = b.dataset.value; S.sauver(); rendre();
   });
+  on("contexteMode", "onclick", (e) => {
+    const b = e.target.closest("button[data-contexte]"); if (!b) return;
+    definirContexte(b.dataset.contexte);
+  });
   on("audioProfile", "onclick", (e) => {
     const b = e.target.closest("button[data-profile]"); if (!b) return;
     S.state().settings.profilAudio = b.dataset.profile; S.sauver(); rendre();
@@ -545,7 +823,11 @@ function brancherEvenements() {
   on("luxVoiceSelect", "onchange", (e) => { S.state().settings.luxVoice = e.target.value; Voix.chargerVoix(); S.sauver(); });
   on("frVoiceSelect", "onchange", (e) => { S.state().settings.frVoice = e.target.value; Voix.chargerVoix(); S.sauver(); });
   on("micSelect", "onchange", (e) => { S.state().settings.micDeviceId = e.target.value; Micro.choisirAppareil(e.target.value); S.sauver(); });
-  on("voicePreviewBtn", "onclick", async () => { await Voix.dire("Moien. Wéi geet et?", "lb"); await Voix.dire("Voici la voix du professeur.", "fr"); });
+  on("voicePreviewBtn", "onclick", async () => {
+    if (audio?.occupe()) return toast("Une séance est en cours.");
+    await Voix.dire("Moien. Wéi geet et?", "lb");
+    await Voix.dire("Voici la voix du professeur.", "fr");
+  });
 
   on("dailyGoalSelect", "onchange", (e) => { S.state().settings.dailyGoal = Number(e.target.value); S.sauver(); rendre(); });
   on("memoryTipsToggle", "onchange", (e) => { S.state().settings.tips = e.target.checked; S.sauver(); });
@@ -593,8 +875,14 @@ function brancherEvenements() {
     const b = e.target.closest("button[data-self]"); if (!b || !resolutionAuto) return;
     const r = resolutionAuto; resolutionAuto = null;
     $("sessionFeedback").hidden = true;
-    r({ hard: EFFET.DOWN, ok: EFFET.UP, easy: EFFET.UP_STRONG }[b.dataset.self] || null);
+    r(["hard", "ok", "easy"].includes(b.dataset.self) ? b.dataset.self : null);
   });
+
+  // Interruptions : appel entrant, Siri, passage en arrière-plan.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && seance) { basculerPause(true); audio?.interrompre("arriere_plan"); }
+  });
+  window.addEventListener("pagehide", () => { arreterSeance("pagehide"); });
 
   window.addEventListener("online", majEtatReseau);
   window.addEventListener("offline", majEtatReseau);
@@ -627,7 +915,7 @@ export function ouvrirLecon(li) {
   if (leconVerrouillee(li)) { allerA("premium"); return toast("Cette leçon fait partie de Premium."); }
   const l = C.COURS()[li];
   const its = C.itemsDeLecon(li);
-  const ok = its.filter((i) => Sched.estSolide(S.progressionDe(i.id))).length;
+  const ok = its.filter((i) => Preuve.estSolide(S.progressionDe(i.id))).length;
   $("lessonModalBody").innerHTML = `
     <p class="kicker">LEÇON ${String(li + 1).padStart(2, "0")} · ÉTAPE ${l.e}</p>
     <h2>${echapper(l.t)}</h2>
@@ -725,7 +1013,8 @@ async function verifierMiseAJour() {
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export { lancerTestMicro, Voix, Micro, Rec, Moteur, S, C, Sched, SB, Sync, Mig, Commandes, Cfg };
+export { lancerTestMicro, Voix, Micro, Rec, Moteur, S, C, Sched, SB, Sync, Mig, Commandes, Cfg, Machine };
+export const machineAudio = () => audio;
 
 // Le module de rendu a besoin de l'application. Les imports ES étant
 // hissés, ce branchement est effectif avant le premier appel à rendre().

@@ -11,6 +11,7 @@ import * as Moteur from "../speech/engine.js";
 import * as Voix from "../audio/tts.js";
 import * as Cfg from "../core/config.js";
 import { CAUSE, fiche } from "../speech/erreurs.js";
+import { resume as resumeFormat, choisir as choisirFormat } from "../audio/formats.js";
 import { compare, verdictDe, LIBELLE, VERDICT, EFFET, seuilPour } from "../speech/score.js";
 import * as SB from "../data/supabase.js";
 import { $, echapper, toast } from "./render.js";
@@ -97,8 +98,20 @@ export async function controlesRapides() {
       : `État ${etatCtx}. Sur iPhone il démarre seulement après un appui à l'écran.`,
     etatCtx === "suspended" ? "Appuie sur Tester maintenant, cela le réveille." : ""));
 
-  L.push(ligne("Enregistrement audio", mime !== null ? "ok" : "bad",
-    mime !== null ? `Format ${mime || "par défaut du navigateur"}` : "MediaRecorder indisponible"));
+  // Le format retenu et ses trois critères, mesurés sur CET appareil.
+  const f = choisirFormat();
+  const rf = resumeFormat(f);
+  L.push(ligne("Enregistrement audio", f.mime === null ? "bad" : "ok",
+    f.mime === null ? "MediaRecorder indisponible" : `Format retenu : ${rf.enregistrement}`));
+  if (f.mime !== null) {
+    L.push(ligne("Lecture locale du format", f.relisible ? "ok" : "bad",
+      `${rf.lectureLocale}. ${f.explication}`,
+      f.relisible ? "" : "La réécoute de ta voix sera indisponible sur cet appareil. Signale-le avec le format affiché."));
+    L.push(ligne("Format accepté par la transcription", rf.speechToText === "compatible" ? "ok" : "warn",
+      rf.speechToText === "compatible"
+        ? "Format officiellement pris en charge par le service de transcription."
+        : "Compatibilité à confirmer par un envoi réel."));
+  }
 
   L.push(ligne("Synthèse vocale", voix.etat, voix.texte,
     voix.etat === "ok" ? "" : "Aucune action possible : cela dépend des voix installées sur l'appareil."));
@@ -199,6 +212,9 @@ export async function lancerTestMicro() {
 
     // 5. Capture
     await Voix.dire("Dis Moien maintenant.", "fr");
+    // Le diagnostic pilote son propre cycle micro, hors séance.
+    // C'est l'exception assumée à la règle de l'orchestrateur unique :
+    // aucune séance ne tourne pendant un diagnostic.
     const capture = await Rec.capturer({
       profil: repos.moyenDb >= -40 ? "voiture" : "calme", attenteMaxMs: 5000
     });

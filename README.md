@@ -138,24 +138,25 @@ ne débloque rien.
 ## Tests
 
 ```
-node --test "tests/*.test.mjs"
+npm test
 ```
 
-72 tests. Ils couvrent les identifiants permanents, la migration, la
+Aucune dépendance à installer. Node 20 ou plus récent suffit.
+
+Ils couvrent les identifiants permanents, la migration sans perte, la
 normalisation luxembourgeoise, les seuils de comparaison, la durée réelle
-des séances, les bornes de la mesure audio, le comptage syllabique,
-la détection d'une configuration incomplète, et la traduction des
-erreurs serveur en causes distinctes.
+des séances, les bornes de la mesure audio, la sélection du format,
+la détection d'une configuration incomplète, le parcours audio complet
+état par état, et un garde-fou d'architecture qui échoue si un module
+contourne l'orchestrateur audio.
 
-Douze d'entre eux vérifient que l'application démarre réellement. Ils
-nécessitent jsdom :
+Régénérer les identifiants après modification du contenu :
 
 ```
-npm install --no-save jsdom
-node --test "tests/*.test.mjs"
+npm run contenu
 ```
 
-Sans jsdom, ces douze sont ignorés et les 60 autres tournent.
+Le script est idempotent : il conserve les identifiants existants.
 
 ---
 

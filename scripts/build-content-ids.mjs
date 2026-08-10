@@ -178,7 +178,8 @@ out += `window.LETZ_CONTENT = window.LULU_CONTENT;   // compatibilité 5.0.0\n`;
 // progression perdue. Le fichier .json reste livré, comme référence et
 // comme secours.
 out += `\n/* Table de migration des anciennes clés "leçon-item" vers les identifiants\n   permanents. Générée avec le contenu. Ne pas modifier à la main. */\n`;
-out += `window.LETZ_LEGACY_MAP = ${JSON.stringify(legacyMap)};\n`;
+out += `window.LULU_LEGACY_MAP = ${JSON.stringify(legacyMap)};\n`;
+out += `window.LETZ_LEGACY_MAP = window.LULU_LEGACY_MAP;   // compatibilité 5.0.0\n`;
 
 writeFileSync(OUT, out, "utf8");
 writeFileSync(

@@ -31,7 +31,7 @@ window.LULU_CONFIG = {
   // Prends la clé PUBLIABLE, celle qui commence par sb_publishable_
   // ou, sur les anciens projets, la clé anon qui commence par eyJ
   // Cette clé est publique par conception, elle est protégée par la RLS.
-  supabaseAnonKey: "sb_publishable_RS1iTvozqjWlmE4OOtx6Wg_oOv5FDKJ",
+  supabaseAnonKey: "",
 
   // À REMPLIR · l'adresse Supabase ci-dessus, suivie de /functions/v1
   functionsBaseUrl: "https://htmodckxiqdrnrwnripp.supabase.co/functions/v1",

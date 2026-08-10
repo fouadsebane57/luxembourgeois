@@ -1,85 +1,190 @@
-# TESTS SUR TON IPHONE
+# TEST IPHONE · GATE 2.5
 
-Coche au fur et à mesure. Note ce qui échoue.
+Onze points à vérifier. Coche, et note ce qui échoue.
 
 ## Avant de commencer
 
-☐ Cache Safari vidé, voir `docs/CONFIGURER.md` étape 4
-☐ Application rouverte depuis `https://fouadsebane57.github.io/luxembourgeois/`
+☐ `config.js` NON remplacé, celui de votre dépôt est déjà bon
+☐ Fichiers du ZIP envoyés sur GitHub, **sauf `config.js` qui n'y est pas**
+☐ iPhone : Réglages, Safari, Effacer historique et données de site
+☐ Si l'application était installée : la supprimer, puis la réinstaller
 
-## Série A · Configuration
+Sans le vidage du cache, votre téléphone continuera de servir l'ancien code
+et aucun de ces tests n'aura de sens.
 
-| Test | Attendu | ☐ |
-|---|---|---|
-| Onglet Voix et micro, ligne Fichier config.js | OK, trois valeurs présentes | ☐ |
-| Ligne Version de l'application | LULU Trajet 5.1.0 | ☐ |
-| Onglet Compte, connexion | ton email s'affiche | ☐ |
+---
 
-## Série B · Le bug corrigé
+## 1 · Micro autorisé
 
-C'est le point le plus important de cette version.
+☐ Onglet **Voix et micro**, bouton **Tester maintenant**
+☐ L'autorisation est demandée, puis la ligne passe à **OK**
 
-| Test | Attendu | ☐ |
-|---|---|---|
-| Bouton Tester maintenant, ligne Moteur audio | OK, en fonctionnement | ☐ |
-| Ligne Bruit ambiant | une valeur entre -70 et -30 dB | ☐ |
-| Ligne Bruit ambiant, valeur absurde ? | plus jamais -150 dB | ☐ |
-| Reste silencieux pendant le test | Rien détecté, avec une explication | ☐ |
-| Dis Moien, ligne Détection de parole | seuil entre -58 et -40 dB, SNR sous 70 dB | ☐ |
-| Bouton Réécouter mon enregistrement | tu t'entends distinctement | ☐ |
+## 2 · Format réellement choisi
 
-Si le SNR dépasse encore 70 dB ou si le seuil descend sous -100 dB,
-le correctif n'est pas actif : ton téléphone sert encore l'ancien code.
-Refais l'étape 4 de `docs/CONFIGURER.md`.
+☐ Ligne **Enregistrement audio** : noter le format affiché : ______________
+☐ Ligne **Lecture locale du format** : compatible ou non compatible ? ______
+☐ Ligne **Format accepté par la transcription** : ______________
 
-## Série C · Reprise de la progression
+Ces trois lignes sont mesurées sur VOTRE appareil. Si la lecture locale
+est annoncée non compatible, l'application vous prévient à l'avance
+plutôt que de vous laisser face à un silence.
 
-| Test | Attendu | ☐ |
-|---|---|---|
-| Lance une séance, fais trois exercices | | ☐ |
-| Ferme complètement l'application, double appui puis balaye vers le haut | | ☐ |
-| Rouvre l'application | Content de te revoir, avec ta leçon | ☐ |
-| Appuie sur Reprendre mon trajet | reprend à la bonne leçon, pas au début | ☐ |
-| Redémarre le téléphone, rouvre | la progression est toujours là | ☐ |
+## 3 · Voix enregistrée
 
-## Série D · Mode voiture
+☐ Le test dit « Dis Moien maintenant »
+☐ Ligne **Détection de parole** : durée et seuil affichés, valeurs plausibles
+☐ Aucune valeur absurde du type -527 dB ou 514 dB de rapport signal sur bruit
 
-Prépare et lance toujours à l'arrêt.
+## 4 · Micro libéré
 
-| Test | Attendu | ☐ |
-|---|---|---|
-| Séance de 10 minutes sans toucher l'écran | se déroule seule | ☐ |
-| Durée réelle | entre 9 et 10 minutes | ☐ |
-| Boutons Répéter, Suivant, Pause | atteignables sans regarder | ☐ |
-| Bouton suivant du volant | passe à l'exercice suivant | ☐ |
-| Bouton précédent du volant | répète l'expression | ☐ |
-| Écran verrouillé | la voix s'arrête, limite connue d'iOS | ☐ |
+Point renforcé en 2.1 : la libération est désormais garantie par un
+`finally`, y compris si l'enregistrement échoue.
 
-## Série E · Installation
 
-| Test | Attendu | ☐ |
-|---|---|---|
-| Safari, bouton Partager, Sur l'écran d'accueil | icône voiture et arcs tricolores | ☐ |
-| Icône lisible parmi les autres applications | oui | ☐ |
-| Ouvrir depuis l'icône | plein écran, sans barre Safari | ☐ |
-| Mode avion pendant une séance | la séance continue | ☐ |
+☐ Après l'enregistrement, l'indicateur orange du micro **s'éteint**
+☐ Il ne reste pas allumé pendant toute la séance
 
-## Série F · En voiture
+## 5 · Écho réellement audible
 
-Ne fais jamais cette série seul au volant.
+L'ordre a changé en 2.2. Vous devez entendre, dans cet ordre :
 
-| Test | Attendu | ☐ |
-|---|---|---|
-| Profil Voiture activé, onglet Voix et micro | seuil relevé au diagnostic | ☐ |
-| Moteur tournant, ventilation en marche | parole détectée | ☐ |
-| Téléphone sur support, à distance normale | parole détectée | ☐ |
-| Micro Bluetooth de la voiture | avertissement affiché | ☐ |
-| Sur 20 réponses, combien reconnues ? | noter le chiffre réel : ____ / 20 | ☐ |
+1. le retour, par exemple « Presque »
+2. **votre propre voix**
+3. le modèle en luxembourgeois
 
-## Si quelque chose échoue
+Le modèle vient en dernier : c'est la forme correcte qui doit rester.
+Sur une réponse jugée correcte, ni écho ni modèle : la séance enchaîne.
 
-Onglet Voix et micro, bouton **Copier** en haut du bloc Diagnostic.
-Colle le texte dans un message, avec :
-- ce que tu faisais,
-- ce que tu attendais,
-- ce qui s'est passé.
+
+☐ Bouton **Réécouter mon enregistrement** : vous vous entendez
+☐ Si vous ne vous entendez pas, un message rouge apparaît et dit pourquoi
+
+C'est le point le plus important de ce lot. Un silence sans message
+signifie que la correction n'a pas fonctionné : signalez-le avec le
+format noté au point 2.
+
+## 6 · Pause éteint le micro et ne perd pas l'exercice
+
+☐ Pendant une consigne, appuyer sur **Pause**
+☐ L'indicateur orange du micro s'éteint immédiatement
+☐ Appuyer sur **Reprendre**
+☐ **La MÊME expression est rejouée**, pas la suivante
+
+C'est le point ajouté en 2.3. Si une autre expression démarre, la
+correction n'a pas fonctionné.
+
+## 6 bis · Pause puis Suivant
+
+☐ Pendant une expression, appuyer sur **Pause**
+☐ Appuyer sur **Suivant**
+☐ **L'application RESTE en pause**, aucune voix ne repart
+☐ L'indicateur orange du micro reste éteint
+☐ Appuyer sur **Reprendre**
+☐ **Une expression DIFFÉRENTE démarre**, pas celle d'avant
+
+C'est le point ajouté en 2.4. Si l'ancienne expression revient, la
+correction n'a pas fonctionné.
+
+## 6 ter · Suivant saute exactement un exercice
+
+☐ Noter l'expression en cours
+☐ Appuyer **deux fois très vite** sur Suivant
+☐ Une seule expression est passée, pas deux
+
+## 6 quater · Répéter pendant l'enregistrement
+
+☐ Pendant que l'application écoute, appuyer sur **Répéter**
+☐ **Aucune voix ne se superpose à votre enregistrement**
+☐ Un message court peut apparaître
+
+## 6 quinquies · Pause éteint le micro
+
+☐ Lancer une séance, appuyer sur **Pause**
+☐ L'indicateur orange du micro **s'éteint immédiatement**
+☐ La mention « Micro coupé » apparaît
+☐ **Reprendre** relance la séance normalement
+
+## 7 · Quitter libère tout
+
+☐ Quitter la séance
+☐ L'indicateur orange est éteint
+☐ Aucune voix ne continue
+☐ Rouvrir une séance fonctionne du premier coup
+
+## 8 · Aucun double enregistrement
+
+☐ Appuyer deux fois de suite très vite sur **Reprendre mon trajet**
+☐ Une seule séance démarre
+☐ Le message « Une séance est déjà en cours » peut apparaître : c'est voulu
+
+## 9 · Aucune montée par simple écoute
+
+☐ Noter le nombre affiché sous **maîtrise vérifiée** : ______
+☐ Lancer **Écoute libre** pendant 5 minutes sans jamais parler
+☐ Revenir à l'accueil : le nombre doit être **identique**
+☐ Le compteur d'expositions, lui, a bien augmenté
+
+## 10 · Rythme séparé de la transcription
+
+☐ Faire un exercice oral sans reconnaissance cloud
+☐ Le texte affiché commence par **« Rythme mesuré, les mots ne sont pas analysés »**
+☐ Il n'y a **jamais** « Entendu : » sans transcription réelle
+
+## 11 · Aucun double enregistrement, version renforcée
+
+☐ Pendant une séance, appuyer sur **Répéter** puis immédiatement **Suivant**
+☐ Une seule voix parle à la fois, jamais deux superposées
+
+## 12 · Progression historique conservée
+
+☐ Sur l'accueil, un bloc **progression historique** apparaît si vous aviez
+  déjà progressé
+☐ Le nombre correspond à votre ancienne progression
+☐ Rien n'a disparu
+
+---
+
+## À prévoir : un chiffre va baisser
+
+Le compteur **maîtrise vérifiée** repart de zéro. Ce n'est pas une perte.
+
+L'ancienne application augmentait le niveau sur simple écoute, et il est
+impossible de distinguer après coup ce qui venait d'une vraie réussite.
+Votre progression est intégralement conservée sous **progression
+historique**, et chaque bonne réponse la reconvertit en maîtrise vérifiée.
+
+Un retour arrière complet reste possible : `docs/ROLLBACK.md`.
+
+---
+
+## En cas d'échec
+
+Onglet **Voix et micro**, bouton **Copier** en haut du bloc Diagnostic.
+Envoyez le texte avec : ce que vous faisiez, ce que vous attendiez,
+ce qui s'est passé.
+
+
+---
+
+## AJOUT GATE 2.5 · file de séance
+
+À vérifier sur appareil réel, en plus des points ci-dessus.
+
+1. Lancer une séance « Écoute et répète ».
+2. Noter l'expression en cours.
+3. Appuyer sur Pause.
+4. Appuyer sur Suivant.
+5. Vérifier que la séance reste en pause et que le micro ne se rouvre pas.
+6. Appuyer sur Reprendre.
+7. Vérifier que l'expression est DIFFÉRENTE de celle notée à l'étape 2.
+
+Répéter en mode « Mode voiture ». À l'étape 6, l'expression doit aussi
+être différente : la répétition soudée à l'écoute est écartée avec elle.
+
+Répéter en mode « Chiffres ». Chaque nombre doit revenir trois fois dans
+la séance, mais jamais deux fois de suite tant qu'un autre nombre reste
+disponible.
+
+Laisser enfin tourner une séance longue sur peu de contenu, jusqu'à
+épuisement de la file. Le recyclage doit prendre le relais sans jamais
+répéter deux fois de suite la même expression.

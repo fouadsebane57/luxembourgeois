@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## 5.1.0 · GATE 2.5 · file de séance par candidatures
+
+Version produit inchangée. Build de cache : `gate2-5`.
+
+Corrigé :
+
+- doublons accidentels dans la file, issus du recouvrement de `neufs`,
+  `dus`, `enCours`, `leconItems` et `solides`. Le scénario
+  `Pause → Suivant → Reprendre` ne peut plus ramener la même expression
+  dès qu'une autre est disponible,
+- mêmes doublons dans la réserve de recyclage,
+- répétition possible au passage de la file au recyclage et à chaque
+  bouclage de la réserve,
+- occurrences perdues sans trace quand la fin de séance imposait un
+  exercice plus court pris plus loin dans la file,
+- saut d'une découverte qui laissait sa répétition soudée en place,
+  donc ramenait aussitôt l'expression écartée.
+
+Ajouté :
+
+- `src/core/file.js`, construction de la file par candidatures :
+  `itemId`, `source`, `raison`, `priorite`, `echeance`,
+  `intentionnelle`, `adjacenceVoulue`,
+- `src/core/rng.js`, aléa injectable. `Math.random()` a quitté le moteur
+  de séance. Une graine redonne exactement la même file,
+- `seance.diagnosticFile`, traçabilité des fusions, déplacements et
+  adjacences subies,
+- `tests/file.test.mjs`, 42 tests sur les graines 1, 2, 3, 10, 42, 100,
+  999 et 2026,
+- `docs/GATE2.5.md`.
+
+Conservé :
+
+- les répétitions pédagogiques voulues. Trois passages en mode chiffres,
+  couple écoute puis répétition en mode voiture. Elles sont déplacées,
+  jamais supprimées.
+
 ## 5.1.0 · 8 août 2026 · LULU Trajet
 
 Changement de nom, nouvelle identité, écran d'accueil avec reprise, et

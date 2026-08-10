@@ -232,3 +232,18 @@ button,.icon-btn{min-height:44px}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
     transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
+
+/* --- GATE 2 : zones distinctes pour transcription, rythme et écho --- */
+.rythme-note{border:1px dashed var(--line);background:rgba(255,255,255,.03);
+  padding:10px 14px;border-radius:12px;color:var(--muted);font-size:12.5px;margin-top:10px}
+.echo-note{border:1px solid #7a3b2f;background:rgba(255,120,100,.07);
+  padding:11px 14px;border-radius:12px;color:#ffb4a2;font-size:13px;margin-top:10px}
+.session-meta{display:flex;justify-content:center;gap:14px;padding:0 0 6px;
+  font-size:11px;color:var(--gold);min-height:16px}
+
+/* Progression historique : visible, distincte de la maîtrise vérifiée. */
+.histo-panel{border-style:dashed}
+.histo-panel b{display:block;font-size:15px;color:var(--gold)}
+.histo-panel small{color:var(--muted);font-size:12.5px;line-height:1.5;display:block;margin-top:5px}
+.lex-meta i.histo{opacity:.45}
+.lex-meta i.histo::after{background:var(--gold)}

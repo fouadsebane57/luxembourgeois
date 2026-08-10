@@ -21,7 +21,11 @@
    =================================================================== */
 
 const VERSION = "5.1.0";
-const CACHE = `lulu-v${VERSION}`;
+// Identifiant de build, distinct de la version applicative.
+// La version affichée reste 5.1.0, comme demandé, mais le nom du cache
+// doit changer, sans quoi l'ancien code resterait servi indéfiniment.
+const BUILD = "gate2-5";
+const CACHE = `lulu-v${VERSION}-${BUILD}`;
 
 /** Jamais mis en cache. Toujours pris sur le réseau. */
 const RESEAU_SEUL = ["/config.js"];
@@ -38,9 +42,10 @@ const COQUILLE = [
   "./cours.legacy-map.json", "./manifest.webmanifest",
   "./src/app.js",
   "./src/core/config.js", "./src/core/content.js", "./src/core/state.js",
+  "./src/core/preuve.js", "./src/core/migration6.js", "./src/core/restitution.js",
   "./src/core/scheduler.js", "./src/core/session.js", "./src/core/migrate.js",
   "./src/audio/tts.js", "./src/audio/mic.js", "./src/audio/vad.js", "./src/audio/recorder.js",
-  "./src/audio/rythme.js",
+  "./src/audio/rythme.js", "./src/audio/formats.js", "./src/audio/lecture.js", "./src/audio/machine.js",
   "./src/speech/normalize.js", "./src/speech/score.js", "./src/speech/engine.js",
   "./src/speech/erreurs.js",
   "./src/data/supabase.js", "./src/data/sync.js",
@@ -75,7 +80,7 @@ self.addEventListener("activate", (e) => {
     await self.clients.claim();
     // On prévient les onglets ouverts : ils peuvent proposer un rechargement.
     const clients = await self.clients.matchAll({ type: "window" });
-    clients.forEach((c) => c.postMessage({ type: "VERSION_ACTIVE", version: VERSION }));
+    clients.forEach((c) => c.postMessage({ type: "VERSION_ACTIVE", version: VERSION, build: BUILD }));
   })());
 });
 

@@ -8,6 +8,7 @@
 import * as C from "../core/content.js";
 import * as S from "../core/state.js";
 import * as Sched from "../core/scheduler.js";
+import * as Preuve from "../core/preuve.js";
 import * as Cfg from "../core/config.js";
 
 export const $ = (id) => document.getElementById(id);
@@ -126,6 +127,15 @@ function accueil() {
   const heures = (st.journal.minutes || 0) / 60;
   set("statLessons", `${faites}/${total}`);
   set("statSolid", A.solides().length);
+
+  // Pendant la transition vers le modèle de preuves, la progression
+  // historique reste visible. Elle n'est pas comptée comme maîtrise.
+  const histo = C.itemsUniques().filter((i) => Preuve.etaitSolideHistoriquement(S.progressionDe(i.id))).length;
+  const bloc = $("histoBlock");
+  if (bloc) {
+    bloc.hidden = histo === 0;
+    set("statHisto", histo);
+  }
   set("statTime", heures >= 1 ? `${heures.toFixed(1)} h` : `${Math.round(st.journal.minutes || 0)} min`);
   set("statStreak", `${st.journal.streak || 0} j`);
 
@@ -168,6 +178,8 @@ function carteMode(m) {
 
 function apprendre() {
   if ($("learnModes")) $("learnModes").innerHTML = A.modes().map(carteMode).join("");
+  $$("#contexteMode button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.contexte === A.contexteActuel()));
   $$(".duration-picker button").forEach((b) =>
     b.classList.toggle("active", Number(b.dataset.min) === Number(S.state().settings.duration)));
 }
@@ -189,7 +201,7 @@ function parcours() {
         <div><h3>${echapper(C.ETAPES()[l.e - 1] || "")}</h3><span>${cours.filter((x) => x.e === l.e).length} leçons</span></div></div></div>`;
     }
     const its = C.itemsDeLecon(li);
-    const ok = its.filter((i) => Sched.estSolide(S.progressionDe(i.id))).length;
+    const ok = its.filter((i) => Preuve.estSolide(S.progressionDe(i.id))).length;
     const pct = its.length ? Math.round((ok / its.length) * 100) : 0;
     const valide = !!S.state().validated[l.lid];
     const verrou = A.leconVerrouillee(li);
@@ -207,16 +219,16 @@ function entrainement() {
   const filtre = document.querySelector("#lexFilters button.active")?.dataset.filter || "all";
   let liste = C.itemsUniques();
   if (q) liste = liste.filter((i) => normaliser(`${i.lb} ${i.fr} ${i.ph}`).includes(q));
-  if (filtre === "due") liste = liste.filter((i) => Sched.estDu(S.progressionDe(i.id)));
-  if (filtre === "solid") liste = liste.filter((i) => Sched.estSolide(S.progressionDe(i.id)));
+  if (filtre === "due") liste = liste.filter((i) => Preuve.estDu(S.progressionDe(i.id)));
+  if (filtre === "solid") liste = liste.filter((i) => Preuve.estSolide(S.progressionDe(i.id)));
   if (filtre === "fav") liste = liste.filter((i) => S.state().favorites[i.id]);
   const total = liste.length, vue = liste.slice(0, 200);
   if ($("lexList")) $("lexList").innerHTML = vue.map((i) => {
     const p = S.progressionDe(i.id);
     return `<div class="lex-row">
       <div class="lex-main"><b>${echapper(i.lb)}</b><em>${echapper(i.ph || "")}</em><span>${echapper(i.fr)}</span></div>
-      <div class="lex-meta" title="compréhension ${p.comprehension} · production ${p.production} · prononciation ${p.pronunciation}">
-        <i style="--n:${p.comprehension}"></i><i style="--n:${p.production}"></i><i style="--n:${p.pronunciation}"></i></div>
+      <div class="lex-meta" title="Maîtrise vérifiée · rappel ${Preuve.niveau(p, Preuve.DIM.RAPPEL)} · production ${Preuve.niveau(p, Preuve.DIM.PRODUCTION)} · prononciation non mesurée${Preuve.aHistorique(p) ? ` · progression historique ${Preuve.niveauGlobalHistorique(p)}` : ""}">
+        <i style="--n:${Preuve.niveau(p, Preuve.DIM.RAPPEL)}"></i><i style="--n:${Preuve.niveau(p, Preuve.DIM.PRODUCTION)}"></i><i class="histo" style="--n:${Preuve.niveauGlobalHistorique(p)}"></i></div>
       <div class="lex-actions">
         <button class="icon-btn ${S.state().favorites[i.id] ? "active" : ""}" data-fav="${i.id}" aria-label="Favori">★</button>
         <button class="icon-btn" data-speak="${encodeURIComponent(i.lb)}" aria-label="Écouter">▶</button>
@@ -251,8 +263,8 @@ function progression() {
   if ($("progressChart")) $("progressChart").innerHTML = barres;
   set("chartTotal", `${Math.round(total)} min`);
 
-  const nonVus = uniques.filter((i) => Sched.niveauGlobal(S.progressionDe(i.id)) === 0).length;
-  const enCours = uniques.filter((i) => { const n = Sched.niveauGlobal(S.progressionDe(i.id)); return n > 0 && n < Sched.NIVEAU_SOLIDE; }).length;
+  const nonVus = uniques.filter((i) => Preuve.niveauGlobal(S.progressionDe(i.id)) === 0).length;
+  const enCours = uniques.filter((i) => { const n = Preuve.niveauGlobal(S.progressionDe(i.id)); return n > 0 && n < Preuve.NIVEAU_SOLIDE; }).length;
   const lignes = [["Non vus", nonVus, "#51677b"], ["En cours", enCours, "#78b9ff"], ["Solides", A.solides().length, "#7be0b3"]];
   if ($("masteryBars")) $("masteryBars").innerHTML = lignes.map(([n, v, c]) =>
     `<div class="mastery-row"><span>${n}</span><div class="mastery-track"><i style="width:${Math.round((v / Math.max(1, uniques.length)) * 100)}%;background:${c}"></i></div><b>${v}</b></div>`).join("");
