@@ -1,190 +1,151 @@
-# TEST IPHONE · GATE 2.5
+# Test sur iPhone
 
-Onze points à vérifier. Coche, et note ce qui échoue.
-
-## Avant de commencer
-
-☐ `config.js` NON remplacé, celui de votre dépôt est déjà bon
-☐ Fichiers du ZIP envoyés sur GitHub, **sauf `config.js` qui n'y est pas**
-☐ iPhone : Réglages, Safari, Effacer historique et données de site
-☐ Si l'application était installée : la supprimer, puis la réinstaller
-
-Sans le vidage du cache, votre téléphone continuera de servir l'ancien code
-et aucun de ces tests n'aura de sens.
+À faire **à l'arrêt**, moteur coupé, une seule fois. Compte vingt
+minutes. Note ce qui bloque, avec le numéro de l'étape.
 
 ---
 
-## 1 · Micro autorisé
+## 1. Installer
 
-☐ Onglet **Voix et micro**, bouton **Tester maintenant**
-☐ L'autorisation est demandée, puis la ligne passe à **OK**
+Ouvre l'adresse **dans Safari**, pas dans une autre application.
+Bouton Partager, puis « Sur l'écran d'accueil ». Lance l'application
+depuis l'icône.
 
-## 2 · Format réellement choisi
-
-☐ Ligne **Enregistrement audio** : noter le format affiché : ______________
-☐ Ligne **Lecture locale du format** : compatible ou non compatible ? ______
-☐ Ligne **Format accepté par la transcription** : ______________
-
-Ces trois lignes sont mesurées sur VOTRE appareil. Si la lecture locale
-est annoncée non compatible, l'application vous prévient à l'avance
-plutôt que de vous laisser face à un silence.
-
-## 3 · Voix enregistrée
-
-☐ Le test dit « Dis Moien maintenant »
-☐ Ligne **Détection de parole** : durée et seuil affichés, valeurs plausibles
-☐ Aucune valeur absurde du type -527 dB ou 514 dB de rapport signal sur bruit
-
-## 4 · Micro libéré
-
-Point renforcé en 2.1 : la libération est désormais garantie par un
-`finally`, y compris si l'enregistrement échoue.
-
-
-☐ Après l'enregistrement, l'indicateur orange du micro **s'éteint**
-☐ Il ne reste pas allumé pendant toute la séance
-
-## 5 · Écho réellement audible
-
-L'ordre a changé en 2.2. Vous devez entendre, dans cet ordre :
-
-1. le retour, par exemple « Presque »
-2. **votre propre voix**
-3. le modèle en luxembourgeois
-
-Le modèle vient en dernier : c'est la forme correcte qui doit rester.
-Sur une réponse jugée correcte, ni écho ni modèle : la séance enchaîne.
-
-
-☐ Bouton **Réécouter mon enregistrement** : vous vous entendez
-☐ Si vous ne vous entendez pas, un message rouge apparaît et dit pourquoi
-
-C'est le point le plus important de ce lot. Un silence sans message
-signifie que la correction n'a pas fonctionné : signalez-le avec le
-format noté au point 2.
-
-## 6 · Pause éteint le micro et ne perd pas l'exercice
-
-☐ Pendant une consigne, appuyer sur **Pause**
-☐ L'indicateur orange du micro s'éteint immédiatement
-☐ Appuyer sur **Reprendre**
-☐ **La MÊME expression est rejouée**, pas la suivante
-
-C'est le point ajouté en 2.3. Si une autre expression démarre, la
-correction n'a pas fonctionné.
-
-## 6 bis · Pause puis Suivant
-
-☐ Pendant une expression, appuyer sur **Pause**
-☐ Appuyer sur **Suivant**
-☐ **L'application RESTE en pause**, aucune voix ne repart
-☐ L'indicateur orange du micro reste éteint
-☐ Appuyer sur **Reprendre**
-☐ **Une expression DIFFÉRENTE démarre**, pas celle d'avant
-
-C'est le point ajouté en 2.4. Si l'ancienne expression revient, la
-correction n'a pas fonctionné.
-
-## 6 ter · Suivant saute exactement un exercice
-
-☐ Noter l'expression en cours
-☐ Appuyer **deux fois très vite** sur Suivant
-☐ Une seule expression est passée, pas deux
-
-## 6 quater · Répéter pendant l'enregistrement
-
-☐ Pendant que l'application écoute, appuyer sur **Répéter**
-☐ **Aucune voix ne se superpose à votre enregistrement**
-☐ Un message court peut apparaître
-
-## 6 quinquies · Pause éteint le micro
-
-☐ Lancer une séance, appuyer sur **Pause**
-☐ L'indicateur orange du micro **s'éteint immédiatement**
-☐ La mention « Micro coupé » apparaît
-☐ **Reprendre** relance la séance normalement
-
-## 7 · Quitter libère tout
-
-☐ Quitter la séance
-☐ L'indicateur orange est éteint
-☐ Aucune voix ne continue
-☐ Rouvrir une séance fonctionne du premier coup
-
-## 8 · Aucun double enregistrement
-
-☐ Appuyer deux fois de suite très vite sur **Reprendre mon trajet**
-☐ Une seule séance démarre
-☐ Le message « Une séance est déjà en cours » peut apparaître : c'est voulu
-
-## 9 · Aucune montée par simple écoute
-
-☐ Noter le nombre affiché sous **maîtrise vérifiée** : ______
-☐ Lancer **Écoute libre** pendant 5 minutes sans jamais parler
-☐ Revenir à l'accueil : le nombre doit être **identique**
-☐ Le compteur d'expositions, lui, a bien augmenté
-
-## 10 · Rythme séparé de la transcription
-
-☐ Faire un exercice oral sans reconnaissance cloud
-☐ Le texte affiché commence par **« Rythme mesuré, les mots ne sont pas analysés »**
-☐ Il n'y a **jamais** « Entendu : » sans transcription réelle
-
-## 11 · Aucun double enregistrement, version renforcée
-
-☐ Pendant une séance, appuyer sur **Répéter** puis immédiatement **Suivant**
-☐ Une seule voix parle à la fois, jamais deux superposées
-
-## 12 · Progression historique conservée
-
-☐ Sur l'accueil, un bloc **progression historique** apparaît si vous aviez
-  déjà progressé
-☐ Le nombre correspond à votre ancienne progression
-☐ Rien n'a disparu
+**Attendu :** l'écran d'accueil affiche « LULU Trajet » et trois
+boutons de séance.
 
 ---
 
-## À prévoir : un chiffre va baisser
+## 2. Lancer le diagnostic
 
-Le compteur **maîtrise vérifiée** repart de zéro. Ce n'est pas une perte.
+Onglet Voix, bouton « Lancer le diagnostic ». Autorise le micro quand
+iOS le demande. Parle quand l'application te le demande.
 
-L'ancienne application augmentait le niveau sur simple écoute, et il est
-impossible de distinguer après coup ce qui venait d'une vraie réussite.
-Votre progression est intégralement conservée sous **progression
-historique**, et chaque bonne réponse la reconvertit en maîtrise vérifiée.
+**Attendu :** une liste de lignes, chacune avec ✓, ✕, — ou ?
 
-Un retour arrière complet reste possible : `docs/ROLLBACK.md`.
+**Note les lignes ✕.** Chacune dit sa cause et l'action à faire.
+
+Lignes qui doivent être ✓ :
+- Adresse sécurisée
+- Micro autorisé
+- Le micro reçoit du son
+- Format d'enregistrement
+- Enregistrement
+- Réécoute de ta voix
+- Micro refermé après le test
+
+Lignes qui seront ✕ ou —, et c'est normal :
+- Reconnaissance luxembourgeoise → autorisation non obtenue
+- Correction phonétique → aucun outil ne sait le faire
+- Voix du modèle → voix allemande, pas luxembourgeoise
+- Audio écran verrouillé → limite du navigateur
 
 ---
 
-## En cas d'échec
+## 3. Écouter un exemple
 
-Onglet **Voix et micro**, bouton **Copier** en haut du bloc Diagnostic.
-Envoyez le texte avec : ce que vous faisiez, ce que vous attendiez,
-ce qui s'est passé.
+Onglet Phrases, bouton « Écouter » sur la première phrase.
 
+**Attendu :** tu entends la phrase. Un avertissement précise que la
+voix est allemande.
+
+**Si tu n'entends rien :** vérifie le bouton silencieux sur le côté du
+téléphone, puis le volume.
 
 ---
 
-## AJOUT GATE 2.5 · file de séance
+## 4. Faire une séance de dix minutes
 
-À vérifier sur appareil réel, en plus des points ci-dessus.
+Onglet Séance, bouton « 10 minutes ». Pose le téléphone, écran allumé.
+Réponds à voix haute à chaque fois qu'on te le demande.
 
-1. Lancer une séance « Écoute et répète ».
-2. Noter l'expression en cours.
-3. Appuyer sur Pause.
-4. Appuyer sur Suivant.
-5. Vérifier que la séance reste en pause et que le micro ne se rouvre pas.
-6. Appuyer sur Reprendre.
-7. Vérifier que l'expression est DIFFÉRENTE de celle notée à l'étape 2.
+**Attendu :** la séance enchaîne seule. Après chaque réponse : le
+retour, ta voix, puis le modèle.
 
-Répéter en mode « Mode voiture ». À l'étape 6, l'expression doit aussi
-être différente : la répétition soudée à l'écoute est écartée avec elle.
+**Le point à vérifier absolument : entends-tu bien TA voix, et est-ce
+bien la phrase que tu viens de dire ?**
 
-Répéter en mode « Chiffres ». Chaque nombre doit revenir trois fois dans
-la séance, mais jamais deux fois de suite tant qu'un autre nombre reste
-disponible.
+---
 
-Laisser enfin tourner une séance longue sur peu de contenu, jusqu'à
-épuisement de la file. Le recyclage doit prendre le relais sans jamais
-répéter deux fois de suite la même expression.
+## 5. Tester Pause et Suivant
+
+Pendant la séance, appuie sur Pause, attends cinq secondes, reprends.
+Puis appuie sur Suivant.
+
+**Attendu :** Pause coupe le son immédiatement. Reprendre continue au
+même endroit. Suivant passe à l'exercice d'après, sans répéter le
+même.
+
+---
+
+## 6. Tester une interruption
+
+Pendant la séance, quitte l'application par le bouton d'accueil.
+Attends dix secondes. Reviens.
+
+**Attendu :** la séance s'est mise en pause. Elle ne repart pas toute
+seule.
+
+---
+
+## 7. Verrouiller l'écran
+
+Pendant la séance, verrouille l'écran.
+
+**Attendu, et c'est la limite connue :** la voix s'arrête. Déverrouille
+et reprends.
+
+**Note le comportement exact :** s'arrête tout de suite, après quelques
+secondes, ou pas du tout.
+
+---
+
+## 8. Tester en Bluetooth
+
+Connecte le téléphone à la voiture, moteur coupé. Relance une séance de
+dix minutes.
+
+**Attendu :** le son sort par les haut-parleurs. Quand l'application
+t'écoute, le son passe en mono, plus sourd. C'est le fonctionnement du
+Bluetooth, pas un défaut.
+
+**Note :** la reconnaissance de ta voix marche-t-elle mieux ou moins
+bien qu'avec le micro du téléphone ?
+
+---
+
+## 9. Tester hors ligne
+
+Active le mode avion. Lance une séance de dix minutes.
+
+**Attendu :** tout fonctionne. Écoute, répétition, écho, modèle. Le
+bilan précise qu'aucune réponse n'a pu être vérifiée.
+
+**Si l'application ne se lance pas hors ligne :** c'est un vrai
+problème, note-le.
+
+---
+
+## 10. Vérifier la progression
+
+Onglet Progrès.
+
+**Attendu :** des chiffres qui correspondent à ce que tu viens de
+faire. « Rencontrées » a augmenté. « Solides » reste à zéro : c'est
+normal, une phrase n'est solide qu'après plusieurs jours.
+
+Onglet Voix, bas de page : la liste de tes enregistrements. Appuie sur
+« Écouter » sur l'un d'eux.
+
+**Attendu :** tu entends bien cette tentative-là.
+
+---
+
+## Ce qu'il faut me renvoyer
+
+Pour chaque étape : ✓ ou le problème exact.
+
+Pour l'étape 2, la liste complète des lignes ✕ avec leur texte.
+
+Pour l'étape 4, la réponse à une question : **est-ce que tu pourrais
+faire ça en conduisant ?**

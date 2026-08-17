@@ -1,158 +1,226 @@
 /* ===================================================================
    ÉTAT APPLICATIF
 
-   Source de vérité côté client pour l'apprentissage.
-   Le statut Premium n'est PAS géré ici : il est lu depuis le serveur.
-   Voir data/entitlements.js.
+   Source de vérité côté client. Le stockage passe par un ADAPTATEUR,
+   jamais par `localStorage` en direct : c'est ce qui permet à la même
+   logique de tourner dans le navigateur, sous Capacitor et dans les
+   tests, sans branche conditionnelle éparpillée.
+
+   MIGRATION
+
+   L'état 5.1.0 et l'état GATE 2.5 sont relus, jamais écrasés. Une
+   sauvegarde de l'ancien état est conservée avant toute écriture, et
+   la restauration est possible à tout moment.
+
+   Règle de migration, héritée et maintenue : une écoute ancienne ne
+   devient JAMAIS une compétence prouvée. L'historique est conservé et
+   affiché à part, sous « progression historique ». Le confondre avec
+   une preuve prolongerait indéfiniment une illusion de niveau.
    =================================================================== */
 
-import { migrerLocal, chargerTable, CLE_V5 } from "./migrate.js";
-import { migrerLocalV6, CLE_V6, SCHEMA_COURANT, restaurerV5 } from "./migration6.js";
 import * as Preuve from "./preuve.js";
-import { COURS } from "./content.js";
+import * as Profil from "./profil.js";
 
-const lireCle = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
-const ecrireCle = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
-const supprimerCle = (k) => { try { localStorage.removeItem(k); } catch (_) {} };
+export const CLE_V6 = "lulu:v6";
+export const CLE_SAUVEGARDE = "lulu:v6:sauvegarde-avant-migration";
+export const CLES_ANCIENNES = ["lulu:v6-gate", "lulu:v5", "letz:v5", "letz:v4", "lux:prog"];
+export const SCHEMA = 6;
 
 export const DEFAUTS = {
-  schema: SCHEMA_COURANT,
+  schema: SCHEMA,
   progress: {},
-  validated: {},
-  favorites: {},
+  profilVocal: Profil.profilVide(),
   journal: { sessions: 0, minutes: 0, last: null, streak: 0, hist: {} },
-  settings: {
-    duration: 20, dailyGoal: 20,
-    recognition: "auto",          // auto | cloud | browser | echo
-    profilAudio: "calme",         // calme | voiture
-    micDeviceId: "",
-    attenteMaxMs: 4500, paroleMaxMs: 9000,
-    voiceRate: 0.85, luxVoice: "", frVoice: "",
-    tips: true, echo: true, commandesVocales: false, contexte: "trajet"
+  reglages: {
+    duree: 20,
+    mode: "trajet",              // trajet | arret
+    reconnaissance: "auto",      // auto | luxasr | navigateur | aucun
+    profilAudio: "voiture",
+    attenteMaxMs: 4500,
+    paroleMaxMs: 9000,
+    vitesseVoix: 0.85,
+    voixLb: "", voixFr: "",
+    echo: true,
+    astuces: true,
+    // Conservation des enregistrements. Faux par défaut, sans exception.
+    conserverMaVoix: false
   },
-  profile: { name: "Apprenant", email: "" },
-
-  // Reprise exacte. Sans ça, l'utilisateur recommence au début à chaque
-  // ouverture, ce qui est la plainte numéro un sur ce type d'application.
-  reprise: {
-    mode: "",            // dernier mode lancé
-    lecon: 0,            // index de leçon
-    lid: "",             // identifiant permanent de la leçon
-    itemId: "",          // identifiant permanent de la dernière expression
-    position: 0,         // rang dans la file de la séance
-    dateMs: 0,           // horodatage
-    seanceMinutes: 0,    // durée choisie
-    terminee: true       // false si la séance a été interrompue
-  },
-
-  sync: { lastPushed: 0, lastPulled: 0, pending: false, deviceId: "" }
+  parcours: { niveau: 1, paquet: "", paquetsTermines: {} },
+  reprise: { mode: "", idPhrase: "", position: 0, dateMs: 0, minutes: 0, terminee: true },
+  verification: {},              // idPhrase -> { st, src, par, le }
+  appareil: ""
 };
 
 let etat = structuredClone(DEFAUTS);
-let rapportMigration = null;
-let minuteurSync = null;
-let pousserVersCloud = null;   // injecté par data/sync.js
+let stockage = null;
+let rapport = null;
 
 export const state = () => etat;
-export const migration = () => rapportMigration;
+export const rapportMigration = () => rapport;
+
+export function brancherStockage(adaptateur) { stockage = adaptateur; }
+
+/* ---------- Chargement ---------- */
 
 export async function charger() {
-  await chargerTable();
+  if (!stockage) throw new Error("Aucun adaptateur de stockage branché.");
 
-  // 1. État déjà au format 6.
-  let v6 = null;
-  try { v6 = JSON.parse(lireCle(CLE_V6) || "null"); } catch (_) {}
-  if (v6?.schema === SCHEMA_COURANT) {
-    etat = fusionProfonde(structuredClone(DEFAUTS), v6);
-    Object.keys(etat.progress).forEach((k) => { etat.progress[k] = Preuve.normaliser(etat.progress[k]); });
-    if (!etat.sync.deviceId) etat.sync.deviceId = identifiantAppareil();
-    sauver(false);
-    return etat;
-  }
-
-  // 2. Migration 5 vers 6 : sauvegarde, migration, vérification.
-  //    Aucune écriture si un seul niveau a baissé.
-  const m6 = migrerLocalV6(lireCle, ecrireCle);
-  rapportMigration = m6.rapport;
-  if (m6.etat) {
-    etat = fusionProfonde(structuredClone(DEFAUTS), m6.etat);
-    Object.keys(etat.progress).forEach((k) => { etat.progress[k] = Preuve.normaliser(etat.progress[k]); });
-    if (!etat.sync.deviceId) etat.sync.deviceId = identifiantAppareil();
-    sauver(false);
-    return etat;
-  }
-  if (m6.rapport.verification && !m6.rapport.verification.ok) {
-    console.error("Migration refusée, progression conservée telle quelle :", m6.rapport.verification.problemes.slice(0, 5));
-  }
-
-  // 3. Aucun état 6 : on repart de la chaîne v3 et v4.
-  let v5 = null;
-  try { v5 = JSON.parse(lireCle(CLE_V5) || "null"); } catch (_) {}
-  if (v5 && v5.schema === 5) {
-    etat = fusionProfonde(structuredClone(DEFAUTS), v5);
-    etat.schema = SCHEMA_COURANT;
-  } else {
-    const { etat: migre, rapport } = migrerLocal(COURS());
-    rapportMigration = rapport;
-    etat = structuredClone(DEFAUTS);
-    if (migre) {
-      etat.progress = migre.progress || {};
-      etat.validated = migre.validated || {};
-      etat.favorites = migre.favorites || {};
-      if (migre.journal) etat.journal = fusionProfonde(etat.journal, migre.journal);
-      if (migre.settings) etat.settings = fusionProfonde(etat.settings, migre.settings);
-      if (migre.profile) etat.profile = fusionProfonde(etat.profile, migre.profile);
+  const brut = await stockage.lire(CLE_V6);
+  if (brut) {
+    const v = parse(brut);
+    if (v?.schema === SCHEMA) {
+      etat = fusionner(structuredClone(DEFAUTS), v);
+      normaliserProgression();
+      await assurerAppareil();
+      return etat;
     }
   }
-  if (!etat.sync.deviceId) etat.sync.deviceId = identifiantAppareil();
-  Object.keys(etat.progress).forEach((k) => { etat.progress[k] = Preuve.normaliser(etat.progress[k]); });
-  sauver(false);
+
+  // Aucun état V6 : on tente une reprise des états antérieurs.
+  const m = await migrer();
+  rapport = m.rapport;
+  etat = m.etat;
+  normaliserProgression();
+  await assurerAppareil();
+  await sauver();
   return etat;
 }
 
-/** Retour arrière vers la progression d'avant migration. */
-export function restaurerProgressionPrecedente() {
-  return restaurerV5(lireCle, ecrireCle, supprimerCle);
+function parse(s) { try { return JSON.parse(s); } catch (_) { return null; } }
+
+function normaliserProgression() {
+  for (const k of Object.keys(etat.progress)) etat.progress[k] = Preuve.normaliser(etat.progress[k]);
+  etat.profilVocal = Profil.normaliser(etat.profilVocal);
 }
 
-function identifiantAppareil() {
+async function assurerAppareil() {
+  if (etat.appareil) return;
   try {
-    const c = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
-    return c;
-  } catch (_) { return "dev-" + Date.now(); }
+    etat.appareil = (globalThis.crypto?.randomUUID?.()) || ("dev-" + Date.now().toString(36));
+  } catch (_) { etat.appareil = "dev-" + Date.now().toString(36); }
 }
 
-export function sauver(synchroniser = true) {
-  try { localStorage.setItem(CLE_V6, JSON.stringify(etat)); }
-  catch (e) { console.warn("Sauvegarde locale impossible", e); }
-  if (synchroniser && pousserVersCloud) {
-    etat.sync.pending = true;
-    clearTimeout(minuteurSync);
-    minuteurSync = setTimeout(() => pousserVersCloud().catch(() => {}), 2000);
-  }
-}
-
-export function brancherSync(fn) { pousserVersCloud = fn; }
-
-export const progressionDe = (id) => Preuve.normaliser(etat.progress[id]);
-export const niveauDe = (id, dim) => Preuve.niveau(etat.progress[id], dim);
+/* ---------- Migration ---------- */
 
 /**
- * Écrit une PREUVE. Seule la transcription fiable est acceptée.
- * Renvoie aussi la raison d'un éventuel refus, pour le journal.
+ * Reprend un état antérieur.
+ *
+ * Ce qui est repris : la progression, sous forme d'HISTORIQUE.
+ * Ce qui n'est PAS repris : les niveaux, comme s'ils étaient prouvés.
+ *
+ * Le contrôle de sortie est simple et vérifiable : aucune dimension
+ * mesurée ne doit être non nulle après migration. Si c'était le cas,
+ * une donnée non fiable serait devenue une preuve.
+ */
+export async function migrer() {
+  const nouvel = structuredClone(DEFAUTS);
+  const r = { trouve: "", expressions: 0, historiques: 0, refus: [], ok: true };
+
+  let ancien = null;
+  for (const cle of CLES_ANCIENNES) {
+    const brut = await stockage.lire(cle);
+    const v = brut ? parse(brut) : null;
+    if (v && (v.progress || v.prog)) { ancien = v; r.trouve = cle; break; }
+  }
+  if (!ancien) return { etat: nouvel, rapport: { ...r, trouve: "", ok: true } };
+
+  // Sauvegarde avant toute écriture. Le retour arrière reste possible.
+  await stockage.ecrire(CLE_SAUVEGARDE, JSON.stringify({ cle: r.trouve, date: Date.now(), etat: ancien }));
+
+  const source = ancien.progress || ancien.prog || {};
+  for (const [id, valeur] of Object.entries(source)) {
+    const normalisee = Preuve.normaliser(valeur);
+    // On ne garde QUE l'héritage. Les dimensions repartent à zéro.
+    const propre = Preuve.entreeVide();
+    propre.legacy = normalisee.legacy || legacyDepuis(valeur);
+    propre.signaux.nombreExpositions = propre.legacy?.seen || 0;
+    propre.signaux.dateDerniereExposition = propre.legacy?.lastSeen || 0;
+    nouvel.progress[id] = propre;
+    r.expressions++;
+    if (propre.legacy) r.historiques++;
+  }
+
+  if (ancien.journal) nouvel.journal = { ...nouvel.journal, ...ancien.journal };
+  const reg = ancien.settings || ancien.reglages || {};
+  if (reg.duration) nouvel.reglages.duree = reg.duration;
+  if (reg.duree) nouvel.reglages.duree = reg.duree;
+  if (reg.echo !== undefined) nouvel.reglages.echo = !!reg.echo;
+  if (reg.voiceRate) nouvel.reglages.vitesseVoix = reg.voiceRate;
+  if (reg.luxVoice) nouvel.reglages.voixLb = reg.luxVoice;
+  if (reg.frVoice) nouvel.reglages.voixFr = reg.frVoice;
+  if (reg.profilAudio) nouvel.reglages.profilAudio = reg.profilAudio;
+
+  // Contrôle de sortie. Aucune dimension mesurée ne doit être remplie.
+  for (const [id, e] of Object.entries(nouvel.progress)) {
+    for (const d of Preuve.DIMENSIONS) {
+      if ((e.dims[d]?.n || 0) !== 0) { r.refus.push(`${id}.${d}`); r.ok = false; }
+    }
+  }
+  if (!r.ok) {
+    // Refus net plutôt que migration douteuse. L'ancien état reste intact.
+    return { etat: structuredClone(DEFAUTS), rapport: r };
+  }
+  return { etat: nouvel, rapport: r };
+}
+
+function legacyDepuis(v) {
+  if (!v || typeof v !== "object") return null;
+  const n = (x) => Math.max(0, Math.min(7, Math.round(Number(x) || 0)));
+  return {
+    schema: 5,
+    comprehension: n(v.comprehension ?? v.n),
+    production: n(v.production ?? v.n),
+    pronunciation: n(v.pronunciation),
+    seen: Math.max(0, Number(v.seen ?? v.vu) || 0),
+    errors: Math.max(0, Number(v.errors) || 0),
+    lastSeen: Number(v.lastSeen ?? v.jour) || 0,
+    nextDue: Number(v.nextDue ?? v.due) || 0
+  };
+}
+
+/** Retour arrière vers l'état d'avant migration. */
+export async function restaurerAvantMigration() {
+  const brut = await stockage.lire(CLE_SAUVEGARDE);
+  const v = brut ? parse(brut) : null;
+  if (!v?.etat) return { ok: false, raison: "aucune_sauvegarde" };
+  await stockage.ecrire(v.cle || CLES_ANCIENNES[0], JSON.stringify(v.etat));
+  await stockage.supprimer(CLE_V6);
+  return { ok: true, cle: v.cle, date: v.date };
+}
+
+/* ---------- Écriture ---------- */
+
+let minuteur = null;
+
+export async function sauver({ immediat = false } = {}) {
+  if (!stockage) return false;
+  if (immediat) return ecrire();
+  clearTimeout(minuteur);
+  return new Promise((r) => { minuteur = setTimeout(() => r(ecrire()), 300); });
+}
+
+async function ecrire() {
+  try { await stockage.ecrire(CLE_V6, JSON.stringify(etat)); return true; }
+  catch (e) { console.warn("Sauvegarde impossible", e); return false; }
+}
+
+export const progressionDe = (id) => Preuve.normaliser(etat.progress[id]);
+
+/**
+ * Écrit une preuve.
+ * Refuse toute source non probante. Le refus est renvoyé, pas avalé.
  */
 export function enregistrerPreuve(id, p) {
   const avant = progressionDe(id);
   const { entree, ecrit, raison } = Preuve.enregistrerPreuve(avant, p);
-  if (!ecrit) return { entree: avant, ecrit: false, raison };
+  if (!ecrit) return { ecrit: false, raison, entree: avant };
   etat.progress[id] = entree;
   sauver();
-  return { entree, ecrit: true, raison: "" };
+  return { ecrit: true, raison: "", entree };
 }
 
-/** Écrit un SIGNAL. N'entre dans aucune dimension de maîtrise. */
-export function enregistrerAutoEvaluation(id, valeur) {
-  etat.progress[id] = Preuve.noterAutoEvaluation(progressionDe(id), valeur);
+export function enregistrerExposition(id) {
+  etat.progress[id] = Preuve.exposer(progressionDe(id));
   sauver();
   return etat.progress[id];
 }
@@ -163,119 +231,100 @@ export function enregistrerRythme(id, mesures) {
   return etat.progress[id];
 }
 
-/**
- * Enregistre une écoute. Ne fait monter AUCUNE dimension.
- * C'est la correction P0.1 : en 5.1.0, deux écoutes suffisaient à
- * faire monter le niveau de compréhension sans aucune preuve.
- */
-export function enregistrerExposition(id) {
-  etat.progress[id] = Preuve.exposer(progressionDe(id));
+export function noterProfil(resultat) {
+  etat.profilVocal = Profil.noter(etat.profilVocal, resultat);
   sauver();
-  return etat.progress[id];
+  return etat.profilVocal;
 }
+
+export function noterReprise(r) {
+  etat.reprise = { ...etat.reprise, ...r, dateMs: Date.now() };
+  sauver();
+  return etat.reprise;
+}
+
+/* ---------- Vérification du contenu ---------- */
 
 /**
- * Résultat d'un exercice oral.
+ * Change le statut linguistique d'une phrase.
  *
- * Une transcription correspondant à l'attendu prouve la PRODUCTION
- * LEXICALE : l'utilisateur a bien dit ce mot, et il était assez
- * intelligible pour le moteur. Elle ne prouve PAS la prononciation :
- * un moteur reconnaît souvent le bon mot malgré un accent marqué.
- * La dimension prononciation reste donc non mesurée.
- *
- * Tout ce qui n'est pas une transcription fiable est refusé ici et
- * doit passer par les fonctions de signaux.
+ * `verified` exige une source. Sans source, la demande est refusée.
+ * C'est la règle qui empêche de valider en masse par lassitude.
  */
-export function enregistrerResultat(id, { fiable, reussi, avecIndice, latenceMs } = {}) {
-  if (!fiable) return { entree: progressionDe(id), ecrit: false, raison: "source_non_probante" };
-  const r = enregistrerPreuve(id, {
-    dim: Preuve.DIM.PRODUCTION, source: Preuve.SOURCE.TRANSCRIPTION,
-    reussi: !!reussi, avecIndice: !!avecIndice, latenceMs
-  });
-  // Produire à voix haute depuis le français démontre aussi le rappel.
-  if (r.ecrit && reussi && !avecIndice) {
-    enregistrerPreuve(id, {
-      dim: Preuve.DIM.RAPPEL, source: Preuve.SOURCE.TRANSCRIPTION,
-      reussi: true, avecIndice: false, latenceMs
-    });
+export function definirStatut(idPhrase, statut, { source = "", par = "" } = {}) {
+  if (!["unverified", "reviewing", "verified"].includes(statut)) {
+    return { ok: false, raison: "statut_inconnu" };
   }
-  return r;
-}
-
-/** Mémorise où l'utilisateur en est. Appelé après chaque exercice. */
-export function noterPosition({ mode, lecon, lid, itemId, position, seanceMinutes, terminee }) {
-  const r = etat.reprise;
-  if (mode !== undefined) r.mode = mode;
-  if (lecon !== undefined) r.lecon = lecon;
-  if (lid !== undefined) r.lid = lid;
-  if (itemId !== undefined) r.itemId = itemId;
-  if (position !== undefined) r.position = position;
-  if (seanceMinutes !== undefined) r.seanceMinutes = seanceMinutes;
-  if (terminee !== undefined) r.terminee = terminee;
-  r.dateMs = Date.now();
+  if (statut === "verified" && !String(source).trim()) {
+    return { ok: false, raison: "source_obligatoire" };
+  }
+  etat.verification[idPhrase] = { st: statut, src: source, par, le: Date.now() };
   sauver();
-  return r;
+  return { ok: true };
 }
 
-export const reprise = () => etat.reprise;
-
-/** Y a-t-il quelque chose à reprendre ? */
-export function aReprendre() {
-  const r = etat.reprise;
-  return !!(r.dateMs && r.mode);
-}
-
-export function instantane() {
-  return {
-    schema: SCHEMA_COURANT,
-    contentVersion: (window.LULU_CONTENT || window.LETZ_CONTENT || {}).contentVersion || "",
-    appVersion: (window.LULU_CONFIG || window.LETZ_CONFIG || {}).appVersion || "",
-    updatedAt: new Date().toISOString(),
-    deviceId: etat.sync.deviceId,
-    progress: etat.progress,
-    validated: etat.validated,
-    favorites: etat.favorites,
-    journal: etat.journal,
-    settings: etat.settings,
-    profile: etat.profile,
-    reprise: etat.reprise
-  };
-}
-
-/** Fusion d'un instantané distant. Conflit arbitré par lastSeen, pas par maximum. */
-export function fusionnerDistant(distant) {
-  if (!distant || typeof distant !== "object") return { fusionnees: 0, ajoutees: 0 };
-  let fusionnees = 0, ajoutees = 0;
-  for (const [id, valeur] of Object.entries(distant.progress || {})) {
-    if (etat.progress[id]) { etat.progress[id] = Preuve.fusionner(etat.progress[id], valeur); fusionnees++; }
-    else { etat.progress[id] = Preuve.normaliser(valeur); ajoutees++; }
-  }
-  etat.validated = { ...(distant.validated || {}), ...etat.validated };
-  etat.favorites = { ...(distant.favorites || {}), ...etat.favorites };
-  const j = distant.journal || {};
-  etat.journal.sessions = Math.max(etat.journal.sessions || 0, j.sessions || 0);
-  etat.journal.minutes = Math.max(etat.journal.minutes || 0, j.minutes || 0);
-  etat.journal.streak = Math.max(etat.journal.streak || 0, j.streak || 0);
-  etat.journal.hist = { ...(j.hist || {}), ...(etat.journal.hist || {}) };
-  // La position de reprise la plus récente fait foi, quel que soit l'appareil.
-  const rd = distant.reprise;
-  if (rd?.dateMs && rd.dateMs > (etat.reprise.dateMs || 0)) etat.reprise = { ...etat.reprise, ...rd };
-  etat.sync.lastPulled = Date.now();
-  sauver(false);
-  return { fusionnees, ajoutees };
+/** Statut effectif : la vérification humaine prime sur le fichier. */
+export function statutDe(phrase) {
+  const v = etat.verification[phrase.id];
+  return v?.st || phrase.st || "unverified";
 }
 
 export function reinitialiserProgression() {
-  etat.progress = {}; etat.validated = {}; etat.favorites = {};
+  etat.progress = {};
+  etat.profilVocal = Profil.profilVide();
   etat.journal = structuredClone(DEFAUTS.journal);
   etat.reprise = structuredClone(DEFAUTS.reprise);
-  sauver();
+  etat.parcours = structuredClone(DEFAUTS.parcours);
+  sauver({ immediat: true });
 }
 
-function fusionProfonde(cible, source) {
+/* ---------- Export et import ---------- */
+
+export function exporter() {
+  return {
+    format: "lulu-trajet",
+    schema: SCHEMA,
+    date: new Date().toISOString(),
+    appareil: etat.appareil,
+    // L'audio n'est jamais exporté. Seules les métadonnées le sont.
+    contient: "progression, profil, réglages, vérifications",
+    progress: etat.progress,
+    profilVocal: etat.profilVocal,
+    journal: etat.journal,
+    reglages: etat.reglages,
+    parcours: etat.parcours,
+    verification: etat.verification
+  };
+}
+
+export async function importer(donnees) {
+  if (!donnees || donnees.format !== "lulu-trajet") return { ok: false, raison: "format_inconnu" };
+  if (Number(donnees.schema) !== SCHEMA) return { ok: false, raison: "schema_incompatible", schema: donnees.schema };
+  etat = fusionner(structuredClone(DEFAUTS), {
+    progress: donnees.progress || {},
+    profilVocal: donnees.profilVocal || Profil.profilVide(),
+    journal: donnees.journal || DEFAUTS.journal,
+    reglages: donnees.reglages || DEFAUTS.reglages,
+    parcours: donnees.parcours || DEFAUTS.parcours,
+    verification: donnees.verification || {},
+    appareil: etat.appareil
+  });
+  normaliserProgression();
+  await sauver({ immediat: true });
+  return { ok: true, expressions: Object.keys(etat.progress).length };
+}
+
+function fusionner(cible, source) {
   for (const [k, v] of Object.entries(source || {})) {
-    if (v && typeof v === "object" && !Array.isArray(v) && cible[k] && typeof cible[k] === "object") fusionProfonde(cible[k], v);
+    if (v && typeof v === "object" && !Array.isArray(v) && cible[k] && typeof cible[k] === "object") fusionner(cible[k], v);
     else if (v !== undefined) cible[k] = v;
   }
   return cible;
+}
+
+/** Remise à zéro complète du module. Utilisée entre deux tests. */
+export function reinitialiserModule() {
+  etat = structuredClone(DEFAUTS);
+  rapport = null;
+  clearTimeout(minuteur);
 }

@@ -1,160 +1,364 @@
 /* ===================================================================
    MOTEUR DE SÉANCE
 
-   L'ancien moteur construisait un tableau de `durée × 1,5` exercices
-   puis les enchaînait sans jamais regarder l'horloge. Une séance de
-   30 minutes pouvait durer 12 ou 50 minutes.
+   Une séance est un FLUX, pas une liste. À chaque tour :
 
-   Ici, la séance est un flux, pas une liste. À chaque tour :
-     temps restant -> estimation du prochain exercice -> on continue ou on clôt.
-   L'estimation s'ajuste sur les durées réellement observées.
+     temps restant -> estimation du prochain exercice -> continuer ou clore
 
-   Un exercice commencé n'est jamais coupé. La clôture est annoncée.
+   L'estimation s'ajuste sur les durées réellement observées. Un
+   exercice commencé n'est jamais coupé au milieu.
+
+   CE QUI CHANGE PAR RAPPORT À LA 5.1.0
+
+   La file ne contient plus des expressions à travailler « d'une
+   certaine façon ». Elle contient des EXERCICES, chacun avec son type
+   et la dimension qu'il vise. C'est ce qui permet de proposer la même
+   phrase en écoute puis en rappel actif trois minutes plus tard, sans
+   que ce soit une répétition accidentelle.
+
+   DOSAGE DES NOUVEAUTÉS
+
+   Une séance ne peut pas introduire plus de `maxNouvelles` phrases.
+   Au-delà, tout le temps restant va à la consolidation. Sans cette
+   limite, une séance de soixante minutes ouvre quarante phrases dont
+   aucune ne sera retenue.
+
+   ESPACEMENT
+
+   La construction de la file passe par core/file.js, qui distingue une
+   répétition VOULUE d'un doublon issu du recouvrement de deux listes.
+   Rien n'est supprimé en silence, les occurrences sont déplacées.
    =================================================================== */
 
-import { estDu, niveauGlobal, normaliser as normaliserEntree, echeance, NIVEAU_SOLIDE } from "./preuve.js";
 import { resoudreRng } from "./rng.js";
-import { construireFile, construireRecyclage } from "./file.js";
+import { candidature, ordonner, SOURCE, RAISON } from "./file.js";
+import { normaliser } from "./preuve.js";
+import * as Sched from "./scheduler.js";
+import { TYPES, typeDe } from "../content/exercices.js";
 
-export const TYPES = { ECOUTE: "listen", ORAL: "speak", NOMBRE: "number", DIALOGUE: "dialogue" };
-
-/** Estimations initiales en millisecondes. Remplacées par le mesuré dès le 2e exercice. */
-const ESTIMATION_INITIALE = {
-  [TYPES.ECOUTE]: 11000,
-  [TYPES.ORAL]: 17000,
-  [TYPES.NOMBRE]: 8000,
-  [TYPES.DIALOGUE]: 55000
+export const MODES = {
+  TRAJET: "trajet",         // aucune interaction visuelle après le lancement
+  APPRENTISSAGE: "arret",   // écran autorisé
+  REVISION: "revision",     // uniquement ce qui est dû
+  DECOUVERTE: "decouverte", // nouvelles phrases, sans révision
+  DIALOGUE: "dialogue",     // conversations
+  FRAGILE: "fragile"        // ce qui résiste
 };
 
 const RESERVE_CLOTURE_MS = 20000;
 
-export function creerSeance({ mode, dureeMinutes, items, dialogues, progression,
-                              leconCourante, etapeCourante, rng, seed }) {
-  const cible = Math.max(1, Number(dureeMinutes) || 10) * 60000;
-  const prog = (id) => normaliserEntree(progression?.[id]);
-  // Aléa injectable. En production, aléa normal. En test, graine
-  // reproductible : la même graine redonne exactement la même file.
-  const tirage = resoudreRng({ rng, seed });
+/** Nombre de phrases nouvelles autorisées, selon la durée. */
+export function maxNouvelles(minutes) {
+  if (minutes <= 10) return 3;
+  if (minutes <= 20) return 5;
+  if (minutes <= 30) return 7;
+  return 9;
+}
 
-  const dus = items.filter((i) => estDu(prog(i.id)));
-  const solides = items.filter((i) => niveauGlobal(prog(i.id)) >= NIVEAU_SOLIDE);
-  const enCours = items.filter((i) => { const n = niveauGlobal(prog(i.id)); return n > 0 && n < NIVEAU_SOLIDE; });
-  const neufs = items.filter((i) => i.lesson === leconCourante && niveauGlobal(prog(i.id)) === 0);
-  const fragiles = items
-    .filter((i) => (prog(i.id).dims.rappel.echecs > 0 || (prog(i.id).legacy?.errors || 0) > 0))
-    .sort((a, b) => (prog(b.id).dims.rappel.echecs || 0) - (prog(a.id).dims.rappel.echecs || 0));
+/**
+ * Construit une séance.
+ *
+ * @param {object} o
+ * @param {string} o.mode
+ * @param {number} o.dureeMinutes
+ * @param {Array}  o.phrases            contenu disponible pour ce niveau
+ * @param {Array}  o.dialogues
+ * @param {function} o.progressionDe    id -> entrée de preuve
+ * @param {object} o.profil             profil vocal, facultatif
+ * @param {number} o.seed               graine, pour reproduire une file
+ */
+export function creerSeance(o) {
+  const minutes = Math.max(1, Number(o.dureeMinutes) || 10);
+  const tirage = resoudreRng({ rng: o.rng, seed: o.seed });
+  const prog = (id) => normaliser(o.progressionDe?.(id));
+  const maintenant = o.maintenant || Date.now();
 
-  const contexte = { mode, dus, solides, enCours, neufs, fragiles, items, dialogues,
-                     leconCourante, etapeCourante, rng: tirage,
-                     echeanceDe: (it) => echeance(prog(it.id)) };
+  const phrases = (o.phrases || []).filter(Boolean);
+  const neuves = phrases.filter((p) => Sched.estNeuve(prog(p.id)));
+  const dues = phrases.filter((p) => Sched.estDue(prog(p.id), maintenant));
+  const exposees = phrases.filter((p) => Sched.estExposeeSeulement(prog(p.id)));
+  const enCours = phrases.filter((p) => {
+    const e = prog(p.id);
+    return !Sched.estNeuve(e) && !Sched.estSolide(e) && !Sched.estDue(e, maintenant);
+  });
+  const solides = phrases.filter((p) => Sched.estSolide(prog(p.id)));
 
-  const construite = construireFile(contexte);
+  const plafond = maxNouvelles(minutes);
+  const contexte = {
+    mode: o.mode || MODES.TRAJET,
+    minutes, plafond, maintenant,
+    prog, tirage,
+    neuves, dues, exposees, enCours, solides,
+    dialogues: o.dialogues || [],
+    profil: o.profil || null
+  };
+
+  const construite = ordonner(candidatures(contexte));
 
   return {
-    mode,
-    cibleMs: cible,
+    mode: contexte.mode,
+    cibleMs: minutes * 60000,
     demarree: false,
     debut: 0,
     index: 0,
-    correct: 0,
+    idSession: "s" + Math.round(maintenant / 1000).toString(36),
+    nouvellesIntroduites: 0,
+    plafondNouvelles: plafond,
+    reussites: 0,
     tentatives: 0,
-    fiables: 0,
-    estimations: { ...ESTIMATION_INITIALE },
+    probantes: 0,
+    estimations: estimationsInitiales(),
     historique: [],
     sautes: 0,
     rng: tirage,
     file: construite.file,
-    // Traçabilité de la construction : occurrences fusionnées,
-    // déplacements, adjacences subies. Aucune fusion silencieuse.
     diagnosticFile: construite.diagnostic,
-    // Dernier itemId réellement consommé. Sert de garde-fou au moment
-    // du recyclage, là où la file ne peut plus rien garantir.
     dernierId: "",
-    // Réserve de rappel. Elle ne doit jamais être vide, sinon une séance
-    // longue lancée sur du contenu neuf se termine au bout de deux minutes.
-    recyclage: construireRecyclage({ dus, enCours, solides, items, leconCourante, etapeCourante, rng: tirage })
+    // Reprise en fin de séance : uniquement du contenu DÉJÀ RENCONTRÉ,
+    // jamais une phrase neuve ouverte à la dernière minute.
+    recyclage: recyclage(contexte, construite.file)
   };
 }
 
-/** Démarre le chronomètre. Appelé au premier exercice, pas à la construction. */
-export function demarrer(s, maintenant = Date.now()) { s.debut = maintenant; s.demarree = true; return s; }
+function estimationsInitiales() {
+  const e = {};
+  for (const t of Object.values(TYPES)) e[t.id] = t.dureeMs;
+  return e;
+}
 
-export const ecouleMs = (s, maintenant = Date.now()) => (s.demarree ? Math.max(0, maintenant - s.debut) : 0);
-export const restantMs = (s, maintenant = Date.now()) => Math.max(0, s.cibleMs - ecouleMs(s, maintenant));
+/* ---------- Construction des candidatures ---------- */
 
-export function progressionTemps(s, maintenant = Date.now()) {
-  return Math.min(1, ecouleMs(s, maintenant) / s.cibleMs);
+function exercice(phrase, type, extra = {}) {
+  const t = typeDe(type);
+  return candidature({
+    type,
+    it: phrase,
+    source: extra.source || SOURCE.LECON,
+    raison: extra.raison || RAISON.ANCRAGE,
+    echeance: extra.echeance || 0,
+    intentionnelle: !!extra.intentionnelle,
+    adjacenceVoulue: !!extra.adjacenceVoulue,
+    occurrence: extra.occurrence || 0,
+    ...(t ? {} : {})
+  });
 }
 
 /**
- * Renvoie le prochain exercice, ou null si la séance doit se clore.
- * Décision fondée sur le temps restant, jamais sur un compteur d'items.
+ * Séquence de découverte d'une phrase neuve.
+ *
+ * Écoute, puis écoute lente, puis répétition immédiate. Les trois sont
+ * soudées : les séparer priverait la répétition de son modèle. C'est
+ * la seule adjacence VOULUE de la construction, et elle est marquée
+ * comme telle pour que le contrôle d'espacement ne la défasse pas.
  */
+function decouverte(phrase) {
+  return [
+    exercice(phrase, TYPES.ECOUTE.id, { source: SOURCE.NEUF, raison: RAISON.DECOUVERTE }),
+    exercice(phrase, TYPES.ECOUTE_LENTE.id, { source: SOURCE.NEUF, raison: RAISON.DECOUVERTE, intentionnelle: true, adjacenceVoulue: true, occurrence: 1 }),
+    exercice(phrase, TYPES.REPETITION.id, { source: SOURCE.NEUF, raison: RAISON.ANCRAGE, intentionnelle: true, adjacenceVoulue: true, occurrence: 2 })
+  ];
+}
+
+/**
+ * Exercice de reprise, choisi selon ce que la phrase a déjà prouvé.
+ * Une phrase seulement entendue ne part pas en rappel actif.
+ */
+function reprise(phrase, entree, extra) {
+  const admis = Sched.typesAdmissibles(entree);
+  const dim = Sched.dimensionSuivante(entree);
+  const voulu = {
+    comprehension: TYPES.COMPREHENSION.id,
+    rappel: TYPES.RAPPEL.id,
+    production: TYPES.PRODUCTION.id,
+    fluidite: TYPES.FLUIDITE.id,
+    transfert: TYPES.VARIATION.id
+  }[dim] || TYPES.PRODUCTION.id;
+  const type = admis.includes(voulu) ? voulu : (admis.includes(TYPES.COMPREHENSION.id) ? TYPES.COMPREHENSION.id : TYPES.ECOUTE.id);
+  return exercice(phrase, type, extra);
+}
+
+function candidatures(ctx) {
+  const { mode, prog, tirage, neuves, dues, exposees, enCours, solides, dialogues, plafond, maintenant } = ctx;
+  const melanger = (a) => a.slice().sort(() => (tirage() < 0.5 ? -1 : 1));
+  const out = [];
+
+  if (mode === MODES.DIALOGUE) {
+    for (const d of melanger(dialogues)) {
+      out.push(candidature({ type: TYPES.ECOUTE_DIALOGUE.id, dialogue: d, source: SOURCE.DIALOGUE, raison: RAISON.DIALOGUE }));
+      out.push(candidature({ type: TYPES.DIALOGUE.id, dialogue: d, source: SOURCE.DIALOGUE, raison: RAISON.DIALOGUE, intentionnelle: true, occurrence: 1 }));
+    }
+    return out;
+  }
+
+  if (mode === MODES.REVISION) {
+    for (const p of melanger(dues)) {
+      out.push(reprise(p, prog(p.id), { source: SOURCE.DU, raison: RAISON.RAPPEL, echeance: Sched.echeance(prog(p.id)) }));
+    }
+    for (const p of melanger(enCours)) {
+      out.push(reprise(p, prog(p.id), { source: SOURCE.EN_COURS, raison: RAISON.CONSOLIDATION }));
+    }
+    return out.length ? out : melanger(solides).map((p) => exercice(p, TYPES.PRODUCTION.id, { source: SOURCE.SOLIDE, raison: RAISON.CONSOLIDATION }));
+  }
+
+  if (mode === MODES.FRAGILE) {
+    const fragiles = ctx.phrasesFragiles || dues.filter((p) => {
+      const e = prog(p.id);
+      return Object.values(e.dims).some((d) => (d.echecs || 0) > 0);
+    });
+    const pool = fragiles.length ? fragiles : dues;
+    for (const p of melanger(pool)) {
+      out.push(exercice(p, TYPES.ECOUTE.id, { source: SOURCE.FRAGILE, raison: RAISON.CORRECTION }));
+      out.push(exercice(p, TYPES.REPETITION.id, { source: SOURCE.FRAGILE, raison: RAISON.CORRECTION, intentionnelle: true, adjacenceVoulue: true, occurrence: 1 }));
+      out.push(exercice(p, TYPES.PRODUCTION.id, { source: SOURCE.FRAGILE, raison: RAISON.CORRECTION }));
+    }
+    return out;
+  }
+
+  if (mode === MODES.DECOUVERTE) {
+    for (const p of neuves.slice(0, plafond)) out.push(...decouverte(p));
+    return out;
+  }
+
+  /* Mode principal : trajet et apprentissage.
+     La révision passe AVANT la découverte. Ouvrir une phrase neuve
+     alors qu'une phrase due attend, c'est perdre le bénéfice de la
+     répétition espacée. */
+
+  const dusTries = melanger(dues).sort((a, b) =>
+    Sched.priorite(prog(a.id), a, maintenant) - Sched.priorite(prog(b.id), b, maintenant));
+
+  const aOuvrir = melanger(neuves)
+    .sort((a, b) => (b.util || 3) - (a.util || 3))
+    .slice(0, plafond);
+
+  // Entrelacement : deux reprises pour une découverte. La reprise reste
+  // majoritaire, la nouveauté ne noie jamais la séance.
+  let i = 0, j = 0, k = 0;
+  const consolidables = melanger([...enCours, ...exposees, ...solides]);
+
+  while (i < dusTries.length || j < aOuvrir.length || k < consolidables.length) {
+    for (let n = 0; n < 2 && i < dusTries.length; n++) {
+      const p = dusTries[i++];
+      out.push(reprise(p, prog(p.id), { source: SOURCE.DU, raison: RAISON.RAPPEL, echeance: Sched.echeance(prog(p.id)) }));
+    }
+    if (j < aOuvrir.length) out.push(...decouverte(aOuvrir[j++]));
+    if (k < consolidables.length) {
+      const p = consolidables[k++];
+      out.push(reprise(p, prog(p.id), { source: SOURCE.EN_COURS, raison: RAISON.CONSOLIDATION }));
+    }
+  }
+
+  // Un dialogue en milieu de séance, dès qu'il y en a un d'accessible.
+  //
+  // L'insertion ne doit jamais tomber À L'INTÉRIEUR d'une séquence
+  // soudée. Une découverte coupée en deux perd son modèle : l'écoute
+  // se retrouve d'un côté, la répétition de l'autre, et l'apprenant
+  // doit répéter une phrase entendue cinq minutes plus tôt.
+  if (dialogues.length && ctx.minutes >= 15) {
+    const d = dialogues[Math.floor(tirage() * dialogues.length)];
+    let position = Math.floor(out.length * 0.6);
+    while (position < out.length && out[position]?.adjacenceVoulue) position += 1;
+    out.splice(position, 0,
+      candidature({ type: TYPES.ECOUTE_DIALOGUE.id, dialogue: d, source: SOURCE.DIALOGUE, raison: RAISON.DIALOGUE }));
+  }
+
+  if (!out.length) {
+    // Aucune progression, aucun contenu dû : on ouvre le début du parcours.
+    for (const p of (ctx.neuves.length ? ctx.neuves : ctx.solides).slice(0, plafond)) out.push(...decouverte(p));
+  }
+  return out;
+}
+
+/**
+ * Réserve de fin de séance.
+ *
+ * Elle contient deux choses, et seulement ces deux-là :
+ *
+ *   les phrases déjà connues avant la séance ;
+ *   les phrases OUVERTES pendant cette séance.
+ *
+ * Le second point n'est pas un relâchement, c'est le cœur du dispositif.
+ * Sans lui, une toute première séance s'arrêtait au bout de quatre
+ * minutes : cinq phrases découvertes, quinze exercices, file vide. Or
+ * c'est précisément la reprise d'une phrase dix minutes après sa
+ * découverte qui la fait tenir. Les paliers commencent à dix minutes
+ * pour cette raison ; encore faut-il que la séance ait de quoi les
+ * honorer.
+ *
+ * Une phrase entre dans la réserve seulement si elle figure déjà dans
+ * la file : au moment où la réserve est consommée, elle a donc été
+ * entendue, dite lentement et répétée.
+ */
+function recyclage(ctx, file) {
+  const { dues, enCours, solides, exposees } = ctx;
+  const ouvertesIci = [];
+  const dansLaFile = new Set();
+  for (const c of file || []) {
+    if (!c.it || dansLaFile.has(c.it.id)) continue;
+    dansLaFile.add(c.it.id);
+    ouvertesIci.push(c.it);
+  }
+  const uniques = [];
+  const vu = new Set();
+  for (const p of [...dues, ...enCours, ...solides, ...exposees, ...ouvertesIci]) {
+    if (vu.has(p.id)) continue;
+    vu.add(p.id);
+    uniques.push(p);
+  }
+  return uniques.slice(0, 80);
+}
+
+/* ---------- Déroulement ---------- */
+
+export function demarrer(s, maintenant = Date.now()) { s.debut = maintenant; s.demarree = true; return s; }
+export const ecouleMs = (s, maintenant = Date.now()) => (s.demarree ? Math.max(0, maintenant - s.debut) : 0);
+export const restantMs = (s, maintenant = Date.now()) => Math.max(0, s.cibleMs - ecouleMs(s, maintenant));
+export const progressionTemps = (s, maintenant = Date.now()) => Math.min(1, ecouleMs(s, maintenant) / s.cibleMs);
+
+const idDe = (e) => e?.it?.id || e?.dialogue?.id || e?.itemId || "";
+
+/** Prochain exercice, ou null si la séance doit se clore. */
 export function prochain(s, maintenant = Date.now()) {
   const restant = restantMs(s, maintenant) - RESERVE_CLOTURE_MS;
   if (restant <= 0) return null;
 
-  // Filet de sécurité à la lecture. La file est déjà espacée à la
-  // construction, mais un remplacement de fin de séance peut retirer
-  // l'expression qui séparait deux occurrences. On déplace alors le
-  // bloc suivant devant, sans jamais rien supprimer.
   eviterRepetitionImmediate(s);
 
   let candidat = s.file[s.index];
   if (!candidat) {
-    // La file est épuisée avant la fin du temps. On recycle des révisions
-    // plutôt que d'arrêter la séance trop tôt.
     if (!s.recyclage.length) return null;
     const n = s.recyclage.length;
     let k = s.index % n;
-    // Garde-fou de bord : au passage de la file au recyclage, puis à
-    // chaque bouclage, l'expression suivante ne doit pas être celle qui
-    // vient d'être consommée. La file, elle, est déjà espacée.
-    if (n > 1 && s.recyclage[k] && s.recyclage[k].id === s.dernierId) k = (k + 1) % n;
-    candidat = { type: TYPES.ORAL, it: s.recyclage[k], recycle: true,
-                 source: "recyclage", raison: "recyclage", intentionnelle: true, itemId: s.recyclage[k]?.id || "" };
+    if (n > 1 && s.recyclage[k]?.id === s.dernierId) k = (k + 1) % n;
+    candidat = {
+      type: TYPES.PRODUCTION.id, it: s.recyclage[k], recycle: true,
+      source: "recyclage", raison: "recyclage", intentionnelle: true,
+      itemId: s.recyclage[k]?.id || ""
+    };
   }
 
   const estime = s.estimations[candidat.type] || 15000;
-  // Un exercice trop long pour le temps restant est remplacé par un plus court.
   if (estime > restant) {
     const courts = s.file.slice(s.index).filter((e) => (s.estimations[e.type] || 15000) <= restant);
     if (!courts.length) return null;
-    // Le remplacement ne doit pas réintroduire une répétition immédiate.
     return courts.find((e) => idDe(e) !== s.dernierId) || courts[0];
   }
   return candidat;
 }
 
 /**
- * Consomme une position de file.
- *
- * Défaut corrigé au GATE 2.5 : quand la fin de séance imposait un
- * exercice plus court pris plus loin dans la file, l'index sautait
- * jusqu'à lui. Toutes les occurrences intermédiaires étaient perdues
- * sans trace. On retire désormais l'occurrence retenue à sa place et
- * l'index ne bouge pas : rien n'est sauté silencieusement.
+ * Consomme une position.
+ * Un exercice pris plus loin dans la file est RETIRÉ à sa place et
+ * l'index ne bouge pas : rien n'est sauté en silence.
  */
-function consommerPosition(s, exercice) {
-  const pos = s.file.indexOf(exercice);
-  if (pos < 0) { s.index += 1; return pos; }          // exercice recyclé
+function consommerPosition(s, ex) {
+  const pos = s.file.indexOf(ex);
+  if (pos < 0) { s.index += 1; return pos; }
   if (pos === s.index) { s.index = pos + 1; return pos; }
-  s.file.splice(pos, 1);                              // remplacement de fin de séance
+  s.file.splice(pos, 1);
   return pos;
 }
 
-/** Identifiant de l'expression portée par un exercice, quel que soit son type. */
-const idDe = (e) => e?.it?.id || e?.dialogue?.id || e?.itemId || "";
-
-/**
- * Déplace le prochain bloc d'une AUTRE expression devant la position
- * courante lorsque celle-ci répéterait immédiatement la précédente.
- *
- * Trois garanties :
- *   aucune occurrence n'est supprimée, seulement déplacée ;
- *   une adjacence explicitement voulue n'est jamais défaite ;
- *   si aucune autre expression n'est disponible, on ne force rien.
- */
 function eviterRepetitionImmediate(s) {
   const courant = s.file[s.index];
   if (!courant || !s.dernierId) return;
@@ -163,67 +367,55 @@ function eviterRepetitionImmediate(s) {
 
   let j = s.index + 1;
   while (j < s.file.length && (idDe(s.file[j]) === s.dernierId || s.file[j].adjacenceVoulue)) j++;
-  if (j >= s.file.length) return;              // adjacence inévitable, assumée
+  if (j >= s.file.length) return;
 
   let fin = j + 1;
   while (fin < s.file.length && s.file[fin].adjacenceVoulue && idDe(s.file[fin]) === idDe(s.file[j])) fin++;
   s.file.splice(s.index, 0, ...s.file.splice(j, fin - j));
 }
 
-/**
- * Passe un exercice sans le compter comme fait.
- *
- * L'index avance d'exactement un cran, mais la durée n'alimente PAS
- * l'estimation : un exercice sauté dure une seconde et fausserait la
- * moyenne mobile, donc le minutage de toute la séance.
- */
-export function sauterExercice(s, exercice) {
-  s.historique.push({ type: exercice.type, dureeMs: 0, saute: true,
-                      id: exercice.it?.id || exercice.dialogue?.id || "" });
-  const id = idDe(exercice);
-  const pos = consommerPosition(s, exercice);
-
-  // Une occurrence LIÉE porte la même expression et n'existe que pour
-  // suivre celle qu'on vient de sauter : la répétition qui suit une
-  // écoute de découverte. La laisser en place ferait revenir aussitôt
-  // l'expression que l'utilisateur vient d'écarter. Une seule EXPRESSION
-  // est sautée, même si elle portait deux occurrences soudées.
+export function sauterExercice(s, ex) {
+  s.historique.push({ type: ex.type, dureeMs: 0, saute: true, id: idDe(ex) });
+  const id = idDe(ex);
+  const pos = consommerPosition(s, ex);
+  // Les occurrences soudées à celle-ci portent la même expression et
+  // n'existent que pour la suivre. Sauter une phrase les saute toutes.
   if (pos >= 0) {
-    while (s.file[s.index] && s.file[s.index].adjacenceVoulue && idDe(s.file[s.index]) === id) {
+    while (s.file[s.index]?.adjacenceVoulue && idDe(s.file[s.index]) === id) {
       s.historique.push({ type: s.file[s.index].type, dureeMs: 0, saute: true, id, lie: true });
       s.index += 1;
     }
   }
-
-  s.sautes = (s.sautes || 0) + 1;
+  s.sautes += 1;
   s.dernierId = id;
   return s;
 }
 
-/** Enregistre la durée réelle et fait avancer l'index. */
-export function terminerExercice(s, exercice, dureeMs) {
-  const t = exercice.type;
-  const prec = s.estimations[t] || ESTIMATION_INITIALE[t] || 15000;
-  // Moyenne mobile. L'estimation colle vite au comportement réel de l'appareil.
+export function terminerExercice(s, ex, dureeMs) {
+  const t = ex.type;
+  const prec = s.estimations[t] || 15000;
   s.estimations[t] = Math.round(prec * 0.65 + dureeMs * 0.35);
-  s.historique.push({ type: t, dureeMs, id: exercice.it?.id || exercice.dialogue?.id || "" });
-  consommerPosition(s, exercice);
-  s.dernierId = idDe(exercice);
+  s.historique.push({ type: t, dureeMs, id: idDe(ex) });
+  if (ex.raison === RAISON.DECOUVERTE && !ex.adjacenceVoulue) s.nouvellesIntroduites += 1;
+  consommerPosition(s, ex);
+  s.dernierId = idDe(ex);
   return s;
 }
 
 export function bilan(s, maintenant = Date.now()) {
-  const minutes = Math.round(ecouleMs(s, maintenant) / 60000);
-  const precision = s.fiables ? Math.round((s.correct / s.fiables) * 100) : null;
   return {
-    minutes,
+    minutes: Math.round(ecouleMs(s, maintenant) / 60000),
     minutesCible: Math.round(s.cibleMs / 60000),
     exercices: s.historique.filter((h) => !h.saute).length,
-    sautes: s.sautes || 0,
+    sautes: s.sautes,
     tentatives: s.tentatives,
-    fiables: s.fiables,
-    correct: s.correct,
-    // Aucune précision affichée si aucune mesure fiable. On n'invente pas de chiffre.
-    precision
+    // Aucune précision affichée sans mesure probante. On n'invente pas
+    // de pourcentage à partir de tentatives non vérifiées.
+    probantes: s.probantes,
+    reussites: s.reussites,
+    precision: s.probantes ? Math.round((s.reussites / s.probantes) * 100) : null,
+    nouvellesIntroduites: s.nouvellesIntroduites
   };
 }
+
+export { TYPES };

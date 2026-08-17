@@ -1,157 +1,69 @@
 /* ===================================================================
-   SERVICE WORKER · LULU TRAJET 5.1.0
+   SERVICE WORKER
 
-   Problème traité ici : sur iPhone, une PWA installée peut continuer à
-   servir un ancien config.js ou un ancien fichier JavaScript pendant
-   des jours. L'utilisateur corrige sa configuration et ne voit aucun
-   changement, ce qui rend tout diagnostic impossible.
+   Stratégie : le contenu et le code sont mis en cache à l'installation
+   pour que la séance fonctionne sans réseau. Les appels aux
+   fournisseurs de reconnaissance ne sont JAMAIS mis en cache : une
+   transcription périmée serait pire qu'une absence de transcription.
 
-   Stratégie retenue, par nature de fichier :
-
-     config.js         RÉSEAU SEUL, jamais de cache.
-                       Une configuration périmée est pire qu'une absence.
-     cours.js, HTML,
-     modules, styles   réseau d'abord, cache de secours si hors ligne
-     icônes, client
-     Supabase          cache d'abord, ils ne changent qu'avec la version
-     backend, tiers    jamais interceptés
-
-   Le nom du cache contient la version. Un changement de version efface
-   donc tout l'ancien cache à l'activation.
+   Le numéro de version doit changer à chaque livraison, sinon les
+   téléphones gardent l'ancienne.
    =================================================================== */
+const VERSION = "lulu-v6-0-0";
 
-const VERSION = "5.1.0";
-// Identifiant de build, distinct de la version applicative.
-// La version affichée reste 5.1.0, comme demandé, mais le nom du cache
-// doit changer, sans quoi l'ancien code resterait servi indéfiniment.
-const BUILD = "gate2-5";
-const CACHE = `lulu-v${VERSION}-${BUILD}`;
-
-/** Jamais mis en cache. Toujours pris sur le réseau. */
-const RESEAU_SEUL = ["/config.js"];
-
-/** Ne change qu'avec la version : cache d'abord. */
-const FIGE = [
-  "icon-192.png", "icon-512.png", "icon-180.png", "icon-32.png",
-  "icon-maskable-192.png", "icon-maskable-512.png", "favicon.png",
-  "src/vendor/supabase.esm.js"
-];
-
-const COQUILLE = [
-  "./", "./index.html", "./styles.css", "./cours.js",
-  "./cours.legacy-map.json", "./manifest.webmanifest",
+const FICHIERS = [
+  "./", "./index.html", "./styles.css", "./manifest.webmanifest",
   "./src/app.js",
-  "./src/core/config.js", "./src/core/content.js", "./src/core/state.js",
-  "./src/core/preuve.js", "./src/core/migration6.js", "./src/core/restitution.js",
-  "./src/core/scheduler.js", "./src/core/session.js", "./src/core/migrate.js",
-  "./src/audio/tts.js", "./src/audio/mic.js", "./src/audio/vad.js", "./src/audio/recorder.js",
-  "./src/audio/rythme.js", "./src/audio/formats.js", "./src/audio/lecture.js", "./src/audio/machine.js",
-  "./src/speech/normalize.js", "./src/speech/score.js", "./src/speech/engine.js",
-  "./src/speech/erreurs.js",
-  "./src/data/supabase.js", "./src/data/sync.js",
-  "./src/ui/render.js", "./src/ui/diagnostic.js", "./src/ui/commandes.js",
-  "./src/vendor/supabase.esm.js",
-  "./icon-192.png", "./icon-512.png", "./icon-180.png", "./favicon.png",
-  "./legal.html", "./privacy.html", "./terms.html"
+  "./src/content/index.js", "./src/content/phrases-a.js", "./src/content/phrases-b.js",
+  "./src/content/dialogues.js", "./src/content/parcours.js", "./src/content/version.js",
+  "./src/content/exercices.js",
+  "./src/core/rng.js", "./src/core/file.js", "./src/core/preuve.js", "./src/core/scheduler.js",
+  "./src/core/session.js", "./src/core/state.js", "./src/core/profil.js",
+  "./src/core/restitution.js", "./src/core/config.js",
+  "./src/audio/machine.js", "./src/audio/mic.js", "./src/audio/recorder.js",
+  "./src/audio/formats.js", "./src/audio/vad.js", "./src/audio/lecture.js",
+  "./src/audio/rythme.js", "./src/audio/tts.js", "./src/audio/tentative.js",
+  "./src/audio/voix-modele.js",
+  "./src/speech/engine.js", "./src/speech/score.js", "./src/speech/normalize.js",
+  "./src/speech/erreurs.js", "./src/speech/provider.js", "./src/speech/prononciation.js",
+  "./src/speech/providers/index.js", "./src/speech/providers/luxasr.js", "./src/speech/providers/repli.js",
+  "./src/platform/index.js", "./src/ui/diagnostic.js",
+  "./icon-192.png", "./icon-512.png", "./favicon.png"
 ];
-
-const estReseauSeul = (chemin) => RESEAU_SEUL.some((f) => chemin.endsWith(f));
-const estFige = (chemin) => FIGE.some((f) => chemin.endsWith("/" + f) || chemin.endsWith(f));
 
 self.addEventListener("install", (e) => {
-  e.waitUntil((async () => {
-    const c = await caches.open(CACHE);
-    // Chaque ressource est demandée avec la version, pour ne jamais
-    // récupérer une copie intermédiaire mise en cache par le navigateur.
-    await Promise.allSettled(
-      COQUILLE.map((u) => c.add(new Request(`${u}${u.includes("?") ? "&" : "?"}v=${VERSION}`, { cache: "reload" })))
-    );
-    await self.skipWaiting();
-  })());
+  e.waitUntil(
+    caches.open(VERSION)
+      // addAll échoue en bloc si un seul fichier manque. On installe
+      // fichier par fichier pour qu'une ressource absente ne prive pas
+      // l'application de tout son cache.
+      .then((c) => Promise.all(FICHIERS.map((f) => c.add(f).catch(() => null))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
-  e.waitUntil((async () => {
-    const cles = await caches.keys();
-    await Promise.all(cles.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
-    if (self.registration.navigationPreload) {
-      try { await self.registration.navigationPreload.enable(); } catch (_) {}
-    }
-    await self.clients.claim();
-    // On prévient les onglets ouverts : ils peuvent proposer un rechargement.
-    const clients = await self.clients.matchAll({ type: "window" });
-    clients.forEach((c) => c.postMessage({ type: "VERSION_ACTIVE", version: VERSION, build: BUILD }));
-  })());
+  e.waitUntil(
+    caches.keys()
+      .then((k) => Promise.all(k.filter((x) => x !== VERSION).map((x) => caches.delete(x))))
+      .then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener("fetch", (e) => {
-  const req = e.request;
-  if (req.method !== "GET") return;
-  const url = new URL(req.url);
-  if (url.origin !== location.origin) return;   // backend et tiers : intacts
+  if (e.request.method !== "GET") return;
+  const url = new URL(e.request.url);
+  // Jamais de cache sur les appels de reconnaissance vocale.
+  if (url.pathname.includes("/functions/") || url.pathname.includes("transcribe")) return;
 
-  // 1. Configuration : réseau seul. Aucune mise en cache, jamais.
-  if (estReseauSeul(url.pathname)) {
-    e.respondWith((async () => {
-      try {
-        return await fetch(new Request(req.url, { cache: "no-store" }));
-      } catch (_) {
-        return new Response(
-          "/* config.js indisponible hors ligne */ window.LULU_CONFIG = window.LULU_CONFIG || null;",
-          { headers: { "Content-Type": "application/javascript" } }
-        );
-      }
-    })());
-    return;
-  }
-
-  // 2. Navigation : réseau d'abord, page en cache si hors ligne.
-  if (req.mode === "navigate") {
-    e.respondWith((async () => {
-      try {
-        const preload = await e.preloadResponse;
-        const r = preload || await fetch(req);
-        const c = await caches.open(CACHE);
-        c.put("./index.html", r.clone());
-        return r;
-      } catch (_) {
-        return (await caches.match("./index.html", { ignoreSearch: true })) || Response.error();
-      }
-    })());
-    return;
-  }
-
-  // 3. Ressources figées : cache d'abord.
-  if (estFige(url.pathname)) {
-    e.respondWith((async () => {
-      const c = await caches.open(CACHE);
-      const hit = await c.match(req, { ignoreSearch: true });
-      if (hit) return hit;
-      const r = await fetch(req);
-      if (r.ok) c.put(req, r.clone());
-      return r;
-    })());
-    return;
-  }
-
-  // 4. Le reste : réseau d'abord, cache de secours.
-  e.respondWith((async () => {
-    const c = await caches.open(CACHE);
-    try {
-      const r = await fetch(req);
-      if (r.ok) c.put(req, r.clone());
-      return r;
-    } catch (_) {
-      const hit = await c.match(req, { ignoreSearch: true });
-      if (hit) return hit;
-      return new Response("Ressource indisponible hors ligne.", { status: 503 });
-    }
-  })());
-});
-
-self.addEventListener("message", (e) => {
-  if (e.data === "SKIP_WAITING" || e.data?.type === "SKIP_WAITING") self.skipWaiting();
-  if (e.data?.type === "VIDER_CACHE") {
-    e.waitUntil(caches.keys().then((k) => Promise.all(k.map((x) => caches.delete(x)))));
-  }
+  e.respondWith(
+    caches.match(e.request).then((rep) => {
+      if (rep) return rep;
+      return fetch(e.request).then((net) => {
+        const copie = net.clone();
+        caches.open(VERSION).then((c) => c.put(e.request, copie)).catch(() => {});
+        return net;
+      }).catch(() => caches.match("./index.html"));
+    })
+  );
 });

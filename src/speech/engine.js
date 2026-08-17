@@ -1,222 +1,98 @@
 /* ===================================================================
-   PIPELINE VOCAL
+   MOTEUR VOCAL
 
-   micro -> réveil du contexte audio -> mesure -> détection de parole
-        -> enregistrement -> transcription lb-LU -> normalisation
-        -> comparaison -> verdict -> retour parlé
+   Chaîne complète, une étape par ligne :
 
-   Chaque étape porte une cause d'échec précise. Le diagnostic sait
-   donc distinguer une configuration absente, une fonction non
-   déployée, un blocage réseau, une authentification refusée, un quota,
-   une erreur serveur, un format refusé, un dépassement de délai et une
-   transcription vide.
+     micro -> contexte audio -> détection de parole -> enregistrement
+        -> TENTATIVE identifiée -> fournisseur de reconnaissance
+        -> comparaison -> verdict -> retour parlé -> écho -> modèle
 
-   Le navigateur reste un secours. Il ne connaît pas le luxembourgeois
-   et ne peut jamais faire baisser la progression.
+   RÈGLE FONDATRICE DE CETTE VERSION
+
+   Trois natures d'échec, jamais confondues, jamais présentées de la
+   même façon, jamais traitées de la même façon par la progression :
+
+     ERREUR_UTILISATEUR   un moteur PROBANT a transcrit autre chose que
+                          l'attendu. C'est la seule situation où la
+                          progression peut baisser.
+
+     INCERTITUDE_MOTEUR   le moteur n'a pas su, ou n'était pas probant,
+                          ou le signal était trop faible pour conclure.
+                          Aucune écriture, ni dans un sens ni dans
+                          l'autre. On le dit à l'utilisateur.
+
+     PANNE_TECHNIQUE      micro refusé, réseau coupé, format rejeté,
+                          service en erreur. Aucune écriture. La panne
+                          est nommée, et jamais imputée à l'apprenant.
+
+   Le défaut que cela corrige est précis : jusqu'ici, un service vocal
+   indisponible et une mauvaise réponse aboutissaient tous deux à
+   « on réessaie », et une transcription réussie par un moteur allemand
+   pouvait faire monter une dimension.
    =================================================================== */
 
-import { blobEnBase64 } from "../audio/recorder.js";
-import { liberer, fluxOuvert } from "../audio/mic.js";
-import { compare, verdictDe, VERDICT, EFFET } from "./score.js";
-import { CAUSE, causeDeReponse, causeDException, texteComplet } from "./erreurs.js";
+import { compare, verdictDe, VERDICT, EFFET, MESSAGE, LIBELLE } from "./score.js";
+import { CAUSE, texteComplet } from "./erreurs.js";
+import * as Providers from "./provider.js";
+import * as Prononciation from "./prononciation.js";
+import * as Tentatives from "../audio/tentative.js";
 import { analyser as analyserRythme, phrase as phraseRythme, detail as detailRythme } from "../audio/rythme.js";
-import * as Cfg from "../core/config.js";
 
-export const TIMEOUT_CLOUD_MS = 15000;
+/** Nature de ce qui s'est passé. Trois valeurs, jamais mélangées. */
+export const NATURE = {
+  REUSSITE: "reussite",
+  ERREUR_UTILISATEUR: "erreur_utilisateur",
+  INCERTITUDE_MOTEUR: "incertitude_moteur",
+  PANNE_TECHNIQUE: "panne_technique"
+};
 
-/** État exact du moteur cloud, avec cause. */
-export function etatCloud(connecte) {
-  const v = Cfg.verifier();
-  if (!v.ok) return { pret: false, cause: v.cause, resume: v.resume, verif: v };
-  if (!connecte) return { pret: false, cause: CAUSE.NON_CONNECTE, resume: "Connecte-toi pour activer la reconnaissance luxembourgeoise.", verif: v };
-  return { pret: true, cause: CAUSE.OK, resume: "Prête, modèle chirp_3, région eu.", verif: v };
-}
+export const MESSAGE_NATURE = {
+  [NATURE.REUSSITE]: "",
+  [NATURE.ERREUR_UTILISATEUR]: "Ce n'est pas encore la bonne forme. Écoute et réessaie.",
+  [NATURE.INCERTITUDE_MOTEUR]: "Je n'ai pas pu vérifier tes mots. Ta progression n'est pas touchée.",
+  [NATURE.PANNE_TECHNIQUE]: "Problème technique de mon côté. Ta progression n'est pas touchée."
+};
 
-export const cloudConfigure = () => Cfg.verifier().ok;
-export const navigateurDisponible = () => !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-
-/* ---------- Reconnaissance de secours, navigateur ---------- */
-
-/**
- * Le micro doit être libéré avant l'appel : sur iOS, la reconnaissance
- * du navigateur ne peut pas ouvrir le micro tant qu'un flux le retient.
- * C'est la cause du « Temps écoulé » observé sur iPhone en 5.0.0.
- */
-export async function reconnaissanceNavigateur(ms = 6000, lang = "de-DE") {
-  const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Rec) {
-    return { engine: "browser", transcripts: [], cause: CAUSE.MOTEUR_ABSENT,
-             error: "Reconnaissance du navigateur indisponible.", latencyMs: 0, lang };
-  }
-  if (fluxOuvert()) await liberer();
-
-  const t0 = performance.now();
-  return new Promise((resolve) => {
-    let rec, fini = false;
-    const out = [];
-    const finir = (cause, error = "") => {
-      if (fini) return;
-      fini = true;
-      try { rec?.stop(); } catch (_) {}
-      resolve({
-        engine: "browser", transcripts: out,
-        cause: out.length ? CAUSE.OK : cause,
-        error: out.length ? "" : error,
-        latencyMs: Math.round(performance.now() - t0), lang
-      });
-    };
-    try { rec = new Rec(); } catch (e) { return finir(CAUSE.MOTEUR_ABSENT, e.message); }
-    rec.lang = lang;
-    rec.interimResults = false;
-    rec.maxAlternatives = 5;
-    rec.continuous = false;
-    rec.onresult = (e) => {
-      try {
-        const r = e.results[e.results.length - 1];
-        for (let i = 0; i < r.length; i++) out.push({ text: r[i].transcript, confidence: r[i].confidence || 0 });
-      } catch (_) {}
-      finir(CAUSE.OK);
-    };
-    rec.onerror = (e) => finir(causeNavigateur(e.error), messageNavigateur(e.error));
-    rec.onend = () => finir(CAUSE.TRANSCRIPTION_VIDE, "Le navigateur n'a retourné aucun texte.");
-    try { rec.start(); }
-    catch (e) { return finir(CAUSE.MOTEUR_ABSENT, "Démarrage refusé : " + e.message); }
-    setTimeout(() => finir(CAUSE.TIMEOUT, "Le navigateur n'a pas répondu dans le délai."), ms);
-  });
-}
-
-const causeNavigateur = (c) => ({
-  "not-allowed": CAUSE.AUTH, "service-not-allowed": CAUSE.AUTH,
-  "network": CAUSE.RESEAU, "no-speech": CAUSE.TRANSCRIPTION_VIDE,
-  "audio-capture": CAUSE.MOTEUR_ABSENT
-}[c] || CAUSE.MOTEUR_ABSENT);
-
-const messageNavigateur = (c) => ({
-  "no-speech": "Le navigateur n'a entendu aucune parole.",
-  "audio-capture": "Le navigateur n'a pas pu accéder au micro. Une autre fonction le retient peut-être.",
-  "not-allowed": "Autorisation refusée pour la reconnaissance du navigateur.",
-  "service-not-allowed": "Le navigateur refuse d'utiliser son service de reconnaissance.",
-  "network": "Le service de reconnaissance du navigateur est injoignable.",
-  "aborted": "Reconnaissance interrompue."
-}[c] || ("Erreur de reconnaissance : " + c));
-
-/* ---------- Reconnaissance cloud ---------- */
-
-export async function reconnaissanceCloud({ blob, mimeType, expected, accepted, contexte, jeton }) {
-  const t0 = performance.now();
-  const echec = (cause, error, extra = {}) => ({
-    engine: "cloud", transcripts: [], cause, error,
-    detail: texteComplet(cause, error),
-    latencyMs: Math.round(performance.now() - t0), ...extra
-  });
-
-  const v = Cfg.verifier();
-  if (!v.ok) return echec(v.cause, v.resume);
-  if (!jeton) return echec(CAUSE.NON_CONNECTE, "Aucune session active.");
-  if (!blob) return echec(CAUSE.TRANSCRIPTION_VIDE, "Aucun enregistrement à envoyer.");
-
-  const url = `${Cfg.functionsBaseUrl()}/speech-transcribe`;
-  const controleur = new AbortController();
-  const minuteur = setTimeout(() => controleur.abort(), TIMEOUT_CLOUD_MS);
-
-  try {
-    const audioBase64 = await blobEnBase64(blob);
-    const res = await fetch(url, {
-      method: "POST",
-      signal: controleur.signal,
-      headers: {
-        "Content-Type": "application/json",
-        apikey: Cfg.supabaseAnonKey(),
-        Authorization: `Bearer ${jeton}`
-      },
-      body: JSON.stringify({
-        audioBase64,
-        mimeType: mimeType || "audio/webm",
-        expected: expected || "",
-        // Le guidage par le vocabulaire attendu est le principal levier
-        // de qualité sur une langue peu dotée comme le luxembourgeois.
-        hints: [expected, ...(accepted || []), ...(contexte || [])].filter(Boolean).slice(0, 60)
-      })
-    });
-
-    let data = {};
-    const texte = await res.text();
-    try { data = texte ? JSON.parse(texte) : {}; }
-    catch (_) {
-      // Réponse non JSON : presque toujours une page d'erreur de la
-      // plateforme, donc une fonction absente ou une mauvaise adresse.
-      return echec(CAUSE.FONCTION_INTROUVABLE,
-        `Réponse inattendue (${res.status}) à l'adresse ${url}`, { httpStatus: res.status });
-    }
-
-    if (!res.ok) {
-      const cause = causeDeReponse(res.status, data);
-      return echec(cause, data.error || `Erreur HTTP ${res.status}`,
-        { httpStatus: res.status, quota: data.quota || null });
-    }
-
-    const transcripts = data.transcripts || [];
-    if (!transcripts.length) {
-      return echec(CAUSE.TRANSCRIPTION_VIDE, "Le service a répondu sans reconnaître de mot.",
-        { httpStatus: 200, usage: data.usage || null, model: data.model, lang: data.lang });
-    }
-
-    return {
-      engine: "cloud", transcripts,
-      cause: CAUSE.OK, error: "", detail: "",
-      model: data.model || "", lang: data.lang || "lb-LU", region: data.region || "",
-      usage: data.usage || null, serverMs: data.serverMs || 0, httpStatus: 200,
-      latencyMs: Math.round(performance.now() - t0)
-    };
-  } catch (err) {
-    const cause = causeDException(err);
-    const detailReseau = cause === CAUSE.RESEAU
-      ? `Appel vers ${url} sans réponse. Trois causes possibles : adresse fausse, projet Supabase en pause, ou requête bloquée par le navigateur faute d'autorisation d'origine.`
-      : err.message;
-    return echec(cause, detailReseau);
-  } finally {
-    clearTimeout(minuteur);
-  }
-}
-
-/* ---------- Pipeline complet ---------- */
+/** Causes techniques. Leur présence interdit toute écriture. */
+const CAUSES_TECHNIQUES = new Set([
+  CAUSE.CONFIG_ABSENTE, CAUSE.CONFIG_INCOMPLETE, CAUSE.NON_CONNECTE,
+  CAUSE.FONCTION_INTROUVABLE, CAUSE.CORS, CAUSE.RESEAU, CAUSE.AUTH,
+  CAUSE.QUOTA, CAUSE.SERVEUR, CAUSE.FORMAT_AUDIO, CAUSE.AUDIO_TROP_LONG,
+  CAUSE.TIMEOUT, CAUSE.MOTEUR_ABSENT
+]);
 
 /**
  * Évalue une réponse orale.
  *
- * La capture n'est PLUS effectuée ici. Elle est fournie par l'appelant
- * via `opt.capturer`, ce qui garantit que le parcours de séance passe
- * par la machine à états et que celle-ci traverse réellement LISTENING,
- * RECORDING puis PROCESSING.
+ * La capture n'est PAS faite ici. Elle est déléguée à l'orchestrateur
+ * audio via `opt.capturer`, ce qui garantit que la machine à états
+ * traverse réellement ÉCOUTE, ENREGISTREMENT puis TRAITEMENT, et que
+ * Pause peut interrompre à tout moment.
  *
- * En GATE 2, ce module appelait capturer() en direct : la machine
- * restait alors en PREPARING pendant tout l'enregistrement, et Pause
- * ne pouvait rien interrompre.
- *
- * @param {function} opt.capturer  obligatoire. Renvoie le même objet que
- *                                 audio/recorder.js capturer().
+ * @param {object} phrase   phrase de contenu
+ * @param {object} opt
+ * @param {function} opt.capturer     obligatoire
+ * @param {string}   opt.idSession
+ * @param {string}   opt.idExercice
+ * @param {string}   opt.prefere      identifiant de fournisseur, ou "auto"
+ * @param {boolean}  opt.enLigne
  */
-export async function evaluerReponse(item, opt = {}) {
-  const depart = performance.now();
+export async function evaluerReponse(phrase, opt = {}) {
+  const t0 = Date.now();
   const trace = [];
-  const marque = (etape, detail) => trace.push({ etape, ms: Math.round(performance.now() - depart), ...detail });
-
-  const preference = opt.moteur || "auto";
-  const attendu = item.lb;
-  const acceptees = Array.isArray(item.alt) ? item.alt : [];
+  const marque = (etape, detail) => trace.push({ etape, ms: Date.now() - t0, ...detail });
 
   if (typeof opt.capturer !== "function") {
-    // Refus explicite plutôt que contournement silencieux.
+    // Refus explicite. Contourner l'orchestrateur audio ferait perdre
+    // la garantie de fermeture du micro.
     return finaliser({
-      engine: "none", cause: CAUSE.MOTEUR_ABSENT, errorKind: "mic",
-      error: "Aucune source de capture fournie. La capture doit passer par l'orchestrateur audio.",
-      detail: "", speechDetected: false, speechMs: 0, snrDb: 0,
-      blob: null, mimeType: "", micro: null, vad: null,
-      transcripts: [], match: null, trace
+      nature: NATURE.PANNE_TECHNIQUE, cause: CAUSE.MOTEUR_ABSENT,
+      error: "Aucune source de capture fournie.",
+      attemptId: "", tentative: null, phrase, trace
     });
   }
 
-  // 1. Capture, déléguée à l'orchestrateur
+  /* 1. Capture -------------------------------------------------- */
   const capture = await opt.capturer({
     profil: opt.profil || "calme",
     attenteMaxMs: opt.attenteMaxMs,
@@ -225,117 +101,199 @@ export async function evaluerReponse(item, opt = {}) {
     annule: opt.annule
   });
   marque("capture", {
-    ok: capture.ok, mime: capture.mimeType, octets: capture.octets,
+    mime: capture.mimeType, octets: capture.octets,
     parole: capture.vad?.speechDetected, paroleMs: capture.vad?.speechMs,
-    plancherDb: Math.round(capture.vad?.noiseFloorDb ?? -100),
-    picDb: Math.round(capture.vad?.peakDb ?? -100),
-    snrDb: Math.round(capture.vad?.snrDb ?? 0),
-    mesureFiable: capture.vad?.mesureFiable
+    snrDb: Math.round(capture.vad?.snrDb ?? 0)
   });
 
+  /* 2. Tentative identifiée ------------------------------------- */
+  // Le Blob est rangé sous un identifiant AVANT toute autre opération.
+  // C'est ce qui garantit que l'écho rejouera CETTE tentative.
+  const attemptId = Tentatives.nouvelId(opt.idSession, opt.idExercice);
+  const tentative = Tentatives.enregistrer({
+    attemptId,
+    idSession: opt.idSession || "",
+    idPhrase: phrase.id,
+    idExercice: opt.idExercice || "",
+    blob: capture.blob || null,
+    mimeType: capture.mimeType || "",
+    dureeMs: capture.vad?.speechMs || 0,
+    plateforme: opt.plateforme || "web",
+    errorKind: capture.errorKind
+  });
+  marque("tentative", { attemptId, etat: tentative.etat, octets: tentative.octets });
+
   const base = {
-    engine: "none", cause: CAUSE.OK, error: capture.error || "", detail: capture.vad?.detail || "",
-    errorKind: capture.errorKind || "none",
+    phrase, attemptId, tentative, trace,
     speechDetected: !!capture.vad?.speechDetected,
     speechMs: capture.vad?.speechMs || 0,
     snrDb: capture.vad?.snrDb || 0,
-    blob: capture.blob, mimeType: capture.mimeType, micro: capture.micro,
-    vad: capture.vad, transcripts: [], match: null, trace
+    mimeType: capture.mimeType || "",
+    vad: capture.vad || null,
+    transcripts: [], match: null,
+    providerId: "", providerNom: "", probant: false, reserve: "",
+    cause: CAUSE.OK, error: "", detail: ""
   };
 
-  if (capture.errorKind === "mic") { base.cause = CAUSE.MOTEUR_ABSENT; return finaliser(base); }
-  if (!base.speechDetected) return finaliser(base);
-
-  // 2. Transcription
-  let stt = null;
-  const veutCloud = preference === "cloud" || (preference === "auto" && cloudConfigure());
-
-  if (veutCloud) {
-    stt = await reconnaissanceCloud({
-      blob: capture.blob, mimeType: capture.mimeType,
-      expected: attendu, accepted: acceptees, contexte: opt.contexte, jeton: opt.jeton
-    });
-    marque("stt_cloud", { cause: stt.cause, http: stt.httpStatus, n: stt.transcripts.length, latenceMs: stt.latencyMs });
-  } else if (preference === "auto") {
-    const e = etatCloud(!!opt.jeton);
-    stt = { engine: "cloud", transcripts: [], cause: e.cause, error: e.resume, detail: e.resume, latencyMs: 0 };
-    marque("stt_cloud", { cause: e.cause, ignore: true });
+  // Micro en défaut : panne technique, pas une erreur de l'apprenant.
+  if (capture.errorKind === "mic") {
+    return finaliser({ ...base, nature: NATURE.PANNE_TECHNIQUE,
+      cause: CAUSE.MOTEUR_ABSENT, error: capture.error || "Micro indisponible." });
   }
 
-  const cloudMuet = !stt || !stt.transcripts.length;
-  if (cloudMuet && preference !== "cloud" && preference !== "echo" && navigateurDisponible()) {
-    const nav = await reconnaissanceNavigateur(Math.min(6000, opt.paroleMaxMs || 6000));
-    marque("stt_navigateur", { cause: nav.cause, n: nav.transcripts.length, latenceMs: nav.latencyMs });
-    if (nav.transcripts.length) stt = nav;
-    else if (!stt) stt = nav;
-    else base.detailSecours = nav.error;
+  // Rien entendu. Ce n'est ni une faute ni une panne : on ne conclut pas.
+  if (!base.speechDetected) {
+    return finaliser({ ...base, nature: NATURE.INCERTITUDE_MOTEUR,
+      cause: CAUSE.TRANSCRIPTION_VIDE,
+      error: capture.vad?.detail || "Aucune parole détectée." });
   }
 
-  if (!stt) {
-    stt = { engine: "echo", transcripts: [], cause: CAUSE.MOTEUR_ABSENT,
-            error: "Aucun moteur de transcription disponible.", latencyMs: 0 };
+  /* 3. Reconnaissance ------------------------------------------- */
+  const { provider, etat, essais } = await Providers.choisir({
+    prefere: opt.prefere || "auto",
+    enLigne: opt.enLigne !== false
+  });
+  marque("fournisseur", { retenu: provider?.id || "", ok: !!etat?.ok, essais: essais?.length || 0 });
+
+  if (!provider || !etat.ok) {
+    const r = { ...base, nature: NATURE.PANNE_TECHNIQUE,
+      cause: etat?.cause || CAUSE.MOTEUR_ABSENT,
+      error: etat?.resume || "Aucun moteur de reconnaissance disponible." };
+    return finaliser(await avecRythme(r, capture, phrase, marque));
   }
 
-  // MODE AUTONOME.
-  // Aucun moteur n'a pu transcrire. Plutôt que de s'arrêter là, on
-  // analyse localement ce qui a été capté : durée et découpage en
-  // syllabes. L'application reste donc utilisable sans serveur, sans
-  // compte et sans configuration. Elle ne prétend rien juger de plus.
-  if (!stt.transcripts.length) {
-    base.rythme = analyserRythme({
-      enveloppe: capture.vad.enveloppe,
-      seuilDb: capture.vad.seuilDb,
-      dureeMs: capture.vad.speechMs,
-      fiable: capture.vad.mesureFiable
-    }, item.syl ?? null);
-    marque("rythme_local", {
-      verdict: base.rythme.verdict, noyaux: base.rythme.noyaux,
-      attendu: base.rythme.attendu, ratio: base.rythme.ratio
-    });
-    base.engine = "local";
-    base.causeTranscription = stt.cause;      // conservée pour le diagnostic
-    base.detailTranscription = stt.detail || stt.error || "";
-    base.messageRythme = phraseRythme(base.rythme);
-    base.detailRythme = detailRythme(base.rythme);
-    base.transcripts = [];
-    base.match = null;
-    base.errorKind = "none";
-    base.cause = CAUSE.OK;
-    base.error = "";
-    base.detail = "";
-    return finaliser(base);
+  base.providerId = provider.id;
+  base.providerNom = provider.nom;
+  base.probant = !!provider.probant;
+  base.reserve = provider.reserve || "";
+
+  // Le mode sans reconnaissance est un mode à part entière, pas un
+  // échec. La séance continue, l'écho et le modèle font le travail.
+  if (provider.id === "aucun") {
+    const r = { ...base, nature: NATURE.INCERTITUDE_MOTEUR, cause: CAUSE.OK, error: "" };
+    return finaliser(await avecRythme(r, capture, phrase, marque));
   }
 
-  base.transcripts = stt.transcripts;
+  const stt = await provider.transcrire({
+    blob: capture.blob, mimeType: capture.mimeType,
+    attendu: phrase.lb, acceptees: phrase.alt || [],
+    contexte: opt.contexte || [],
+    dureeMaxMs: Math.min(6000, opt.paroleMaxMs || 6000)
+  });
+  marque("transcription", { provider: stt.providerId, cause: stt.cause, n: stt.transcripts.length, latenceMs: stt.latencyMs });
+
   base.cause = stt.cause;
-  base.error = stt.error || base.error;
-  base.detail = stt.detail || texteComplet(stt.cause, stt.error);
+  base.error = stt.error || "";
+  base.detail = texteComplet(stt.cause, stt.error);
+  base.latencyMs = stt.latencyMs || 0;
   base.model = stt.model || "";
   base.lang = stt.lang || "";
-  base.httpStatus = stt.httpStatus;
-  base.latencyMs = stt.latencyMs || 0;
-  base.usage = stt.usage || null;
-  base.engine = stt.transcripts.length ? stt.engine : "echo";
-  base.errorKind = stt.transcripts.length ? "none" : "service";
+  base.ipa = stt.ipa || "";
 
-  // 3. Comparaison
-  base.match = compare(attendu, acceptees, stt.transcripts);
+  if (!stt.transcripts.length) {
+    // Distinguer une panne d'un silence. Une transcription vide sur un
+    // signal correct n'est pas la même chose qu'un serveur injoignable.
+    const nature = CAUSES_TECHNIQUES.has(stt.cause) && stt.cause !== CAUSE.MOTEUR_ABSENT
+      ? NATURE.PANNE_TECHNIQUE
+      : (stt.cause === CAUSE.TRANSCRIPTION_VIDE ? NATURE.INCERTITUDE_MOTEUR : NATURE.PANNE_TECHNIQUE);
+    const r = { ...base, nature };
+    return finaliser(await avecRythme(r, capture, phrase, marque));
+  }
+
+  /* 4. Comparaison ---------------------------------------------- */
+  base.transcripts = stt.transcripts;
+  base.match = compare(phrase.lb, phrase.alt || [], stt.transcripts);
   marque("comparaison", {
     entendu: base.match.texte, cible: base.match.cible,
-    score: Number(base.match.score.toFixed(3)),
-    exact: base.match.exact, accentSeul: base.match.diacritiqueSeul
+    score: Number(base.match.score.toFixed(3)), exact: base.match.exact
   });
 
-  return finaliser(base);
+  Tentatives.annoter(attemptId, {
+    transcription: base.match.texte, provider: provider.id
+  });
+
+  /* 5. Verdict --------------------------------------------------- */
+  const v = verdictDe({
+    engine: provider.probant ? "cloud" : "browser",
+    errorKind: "none",
+    speechDetected: base.speechDetected,
+    speechMs: base.speechMs,
+    snrDb: base.snrDb,
+    match: base.match
+  });
+
+  let nature;
+  if (v.effet === EFFET.NONE) nature = NATURE.INCERTITUDE_MOTEUR;
+  else if (v.effet === EFFET.DOWN) nature = NATURE.ERREUR_UTILISATEUR;
+  else if (v.verdict === VERDICT.CORRECT) nature = NATURE.REUSSITE;
+  else nature = NATURE.INCERTITUDE_MOTEUR;
+
+  // Verrou d'architecture. Un moteur non probant ne peut jamais
+  // produire une erreur imputée à l'utilisateur, ni une écriture.
+  if (!provider.probant) {
+    if (nature === NATURE.ERREUR_UTILISATEUR) nature = NATURE.INCERTITUDE_MOTEUR;
+    v.fiable = false;
+  }
+
+  const r = { ...base, nature, verdict: v.verdict, effet: v.effet, fiable: !!v.fiable && !!provider.probant };
+  Tentatives.annoter(attemptId, { verdict: v.verdict, fiable: r.fiable });
+  return finaliser(await avecRythme(r, capture, phrase, marque));
 }
 
-function finaliser(r) {
-  const v = verdictDe(r);
-  r.verdict = v.verdict;
-  r.effet = v.effet;
-  r.fiable = v.fiable;
-  r.totalMs = r.trace.length ? r.trace[r.trace.length - 1].ms : 0;
+/**
+ * Ajoute l'analyse locale du rythme.
+ *
+ * Elle n'est calculée que lorsqu'aucune transcription n'est
+ * disponible : afficher les deux en même temps a déjà été une source
+ * de confusion, l'utilisateur lisant « 1 groupe de son sur 1 attendu »
+ * comme si le mot avait été reconnu.
+ */
+async function avecRythme(r, capture, phrase, marque) {
+  if (r.transcripts.length) return r;
+  if (!capture.vad?.mesureFiable) return r;
+  r.rythme = analyserRythme({
+    enveloppe: capture.vad.enveloppe,
+    seuilDb: capture.vad.seuilDb,
+    dureeMs: capture.vad.speechMs,
+    fiable: capture.vad.mesureFiable
+  }, phrase.syl ?? null);
+  r.messageRythme = phraseRythme(r.rythme);
+  r.detailRythme = detailRythme(r.rythme);
+  marque?.("rythme_local", { verdict: r.rythme.verdict, noyaux: r.rythme.noyaux, attendu: r.rythme.attendu });
   return r;
 }
 
-export { VERDICT, EFFET, CAUSE };
+function finaliser(r) {
+  r.verdict = r.verdict || verdictParDefaut(r.nature);
+  r.effet = r.effet ?? (r.nature === NATURE.REUSSITE ? EFFET.UP_STRONG
+    : r.nature === NATURE.ERREUR_UTILISATEUR ? EFFET.DOWN : EFFET.NONE);
+  r.fiable = !!r.fiable;
+  r.correct = r.nature === NATURE.REUSSITE;
+
+  // Message affiché ET dit. Une panne n'est jamais formulée comme une
+  // faute de l'apprenant.
+  r.message = r.nature === NATURE.REUSSITE
+    ? MESSAGE[VERDICT.CORRECT]
+    : (r.nature === NATURE.ERREUR_UTILISATEUR
+        ? (MESSAGE[r.verdict] || MESSAGE_NATURE[r.nature])
+        : MESSAGE_NATURE[r.nature]);
+  r.libelle = LIBELLE[r.verdict] || "";
+
+  // Aucune écriture pédagogique n'est possible sans preuve probante.
+  r.ecrivable = r.fiable && (r.nature === NATURE.REUSSITE || r.nature === NATURE.ERREUR_UTILISATEUR);
+
+  // Rappel systématique : la prononciation n'est pas mesurée.
+  r.prononciation = { disponible: false, message: Prononciation.MESSAGE_INDISPONIBLE };
+
+  r.totalMs = r.trace?.length ? r.trace[r.trace.length - 1].ms : 0;
+  return r;
+}
+
+const verdictParDefaut = (nature) => ({
+  [NATURE.REUSSITE]: VERDICT.CORRECT,
+  [NATURE.ERREUR_UTILISATEUR]: VERDICT.RETRAVAILLER,
+  [NATURE.INCERTITUDE_MOTEUR]: VERDICT.INCERTAIN,
+  [NATURE.PANNE_TECHNIQUE]: VERDICT.SERVICE
+}[nature] || VERDICT.INCERTAIN);
+
+export { VERDICT, EFFET, CAUSE, LIBELLE, MESSAGE };

@@ -12,9 +12,12 @@
      3. de-DE ou de-AT, allemand standard, approximation
      4. nl-NL, si rien d'autre, très approximatif
 
-   Limite connue et non contournable : sur iPhone, la synthèse s'arrête
-   quand l'écran se verrouille. La solution durable est l'audio
-   pré-enregistré. Elle n'est pas dans ce lot.
+   Limite connue et non contournable en web : sur iPhone, la synthèse
+   s'arrête quand l'écran se verrouille. La solution durable est
+   l'audio pré-enregistré, lu par un élément audio, qui lui continue.
+   L'architecture de audio/voix-modele.js est faite pour cela : dès
+   qu'un fichier natif existe pour une phrase, il passe devant la
+   synthèse sans qu'aucun autre module ne change.
    =================================================================== */
 
 let voix = [];
@@ -33,7 +36,7 @@ const RANGS = [
 ];
 
 function reglages() {
-  try { return JSON.parse(localStorage.getItem("lulu:v5") || "{}").settings || {}; }
+  try { return JSON.parse(localStorage.getItem("lulu:v6") || "{}").settings || {}; }
   catch (_) { return {}; }
 }
 

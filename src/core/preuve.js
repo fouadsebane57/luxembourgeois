@@ -70,7 +70,25 @@ export const SOURCES_PROBANTES = new Set([SOURCE.TRANSCRIPTION]);
 
 export const NIVEAU_MAX = 7;
 export const NIVEAU_SOLIDE = 4;
+export const MINUTE = 60000;
 export const JOUR = 86400000;
+
+/**
+ * Paliers de reprise, en millisecondes, à partir de l'instant présent.
+ *
+ * En 5.1.0 les intervalles étaient exprimés en JOURS et l'échéance
+ * était calculée depuis minuit. Une phrase vue à neuf heures du matin
+ * pour la première fois ne pouvait donc pas revenir avant le
+ * lendemain, alors que la reprise la plus rentable est celle qui a
+ * lieu quelques minutes plus tard, dans la même séance.
+ *
+ * Le premier palier vaut dix minutes. C'est le changement qui rend la
+ * mémorisation possible en une seule séance de trajet.
+ */
+export const PALIERS = [10 * MINUTE, 1 * JOUR, 3 * JOUR, 7 * JOUR, 14 * JOUR, 30 * JOUR, 60 * JOUR];
+export const PALIER_MAX = PALIERS.length - 1;
+
+/** Conservé pour la lecture des états 5.1.0. N'est plus utilisé en écriture. */
 export const INTERVALLES = [0, 1, 2, 4, 8, 16, 32, 64];
 
 export const aujourdHui = () => {
@@ -84,7 +102,13 @@ const entier = (n) => Math.max(0, Math.min(NIVEAU_MAX, Math.round(Number(n) || 0
 /* ---------- Structure ---------- */
 
 export function dimensionVide() {
-  return { n: 0, reussites: 0, echecs: 0, avecIndice: 0, sansIndice: 0, dernier: 0, echeance: 0 };
+  return { n: 0, reussites: 0, echecs: 0, avecIndice: 0, sansIndice: 0,
+           // `premier` date la PREMIÈRE réussite. Sans lui, trois
+           // réussites obtenues en une minute seraient indiscernables
+           // de trois réussites étalées sur deux semaines, et une
+           // phrase serait déclarée solide sans avoir jamais été
+           // retrouvée après un oubli.
+           premier: 0, dernier: 0, echeance: 0, dernierAttempt: "" };
 }
 
 export function signauxVides() {
@@ -200,7 +224,7 @@ export function echeance(entree) {
   return d.length ? Math.min(...d) : 0;
 }
 
-export function estDu(entree, t = aujourdHui()) {
+export function estDu(entree, t = Date.now()) {
   if (niveauGlobal(entree) <= 0) return false;
   const ech = echeance(entree);
   return ech === 0 || ech <= t;
@@ -291,20 +315,54 @@ export function enregistrerPreuve(entree, p = {}) {
   if (!SOURCES_PROBANTES.has(source)) return { entree: e, ecrit: false, raison: "source_non_probante" };
 
   const d = e.dims[dim];
-  d.dernier = Date.now();
+  const maintenant = Date.now();
+
+  /* ------------------------------------------------------------------
+     RÉUSSIR EN AVANCE NE FAIT PAS PROGRESSER LE PALIER
+
+     Défaut corrigé ici. Une phrase reprise plusieurs fois dans la même
+     séance enchaînait les réussites, et chaque réussite montait d'un
+     palier. Cinq passages en vingt minutes suffisaient à propulser la
+     phrase au palier de soixante jours. Résultat : elle ne revenait
+     plus jamais, alors qu'elle n'avait jamais été retrouvée après le
+     moindre oubli.
+
+     Règle appliquée : un palier ne monte QUE si la reprise a lieu à son
+     échéance ou après. Une reprise anticipée est enregistrée comme
+     réussite, elle nourrit la facilité et le profil, mais elle ne
+     repousse pas la prochaine échéance.
+
+     Un ÉCHEC, lui, compte toujours, quel qu'en soit le moment :
+     l'oubli est l'information la plus fiable dont nous disposions.
+     ------------------------------------------------------------------ */
+  const etaitDue = !d.echeance || d.echeance <= maintenant;
+
+  d.dernier = maintenant;
 
   if (reussi) {
+    if (!d.premier) d.premier = maintenant;
     d.reussites += 1;
     if (p.avecIndice) d.avecIndice += 1; else d.sansIndice += 1;
     // Une réussite sans indice est une meilleure preuve de rappel.
-    d.n = entier(d.n + (p.avecIndice ? 1 : 2));
+    if (etaitDue) d.n = entier(d.n + (p.avecIndice ? 1 : 2));
     if (p.latenceMs > 0) e.latences = [...e.latences, Math.round(p.latenceMs)].slice(-10);
   } else {
     d.echecs += 1;
     d.n = entier(d.n - 1);
   }
 
-  d.echeance = aujourdHui() + INTERVALLES[Math.min(d.n, NIVEAU_MAX)] * JOUR;
+  // Échéance en temps absolu, pas en jours depuis minuit. Le palier
+  // dérive du niveau atteint, borné par le nombre de paliers.
+  // Une réussite anticipée laisse l'échéance existante intacte.
+  if (etaitDue || !reussi) {
+    const palier = Math.min(PALIER_MAX, Math.max(0, d.n - 1));
+    d.echeance = maintenant + PALIERS[palier];
+  }
+
+  // Traçabilité : d'où vient cette preuve. Sert au profil vocal et au
+  // diagnostic. Aucune décision pédagogique ne s'appuie dessus.
+  if (p.attemptId) d.dernierAttempt = String(p.attemptId);
+
   return { entree: e, ecrit: true, raison: "" };
 }
 
@@ -334,8 +392,11 @@ export function fusionner(local, distant) {
       echecs: Math.max(x.echecs, y.echecs),
       avecIndice: Math.max(x.avecIndice, y.avecIndice),
       sansIndice: Math.max(x.sansIndice, y.sansIndice),
+      premier: Math.min(x.premier || Infinity, y.premier || Infinity) === Infinity ? 0
+             : Math.min(x.premier || Infinity, y.premier || Infinity),
       dernier: Math.max(x.dernier, y.dernier),
-      echeance: recent.echeance || 0
+      echeance: recent.echeance || 0,
+      dernierAttempt: recent.dernierAttempt || ""
     };
   }
   const sa = a.signaux, sb = b.signaux;
